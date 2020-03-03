@@ -10,8 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Rican7/retry/backoff"
-	"github.com/Rican7/retry/strategy"
+	"github.com/Rican7/retry/jitter"
 	"github.com/sirupsen/logrus"
 )
 
@@ -229,8 +228,7 @@ func (d *Generic) execute(ctx context.Context, sql string, args ...interface{}) 
 		defer d.Unlock()
 	}
 
-	wait := strategy.Backoff(backoff.Linear(100 + time.Millisecond))
-	for i := uint(0); i < 20; i++ {
+	for i := uint(0); i < 500; i++ {
 		if i > 2 {
 			logrus.Debugf("EXEC (try: %d) %v : %s", i, args, Stripped(sql))
 		} else {
@@ -238,7 +236,7 @@ func (d *Generic) execute(ctx context.Context, sql string, args ...interface{}) 
 		}
 		result, err = d.DB.ExecContext(ctx, sql, args...)
 		if err != nil && d.Retry != nil && d.Retry(err) {
-			wait(i)
+			time.Sleep(jitter.Deviation(nil, 0.3)(2 * time.Millisecond))
 			continue
 		}
 		return result, err
