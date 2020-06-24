@@ -33,9 +33,10 @@ func init() {
 }
 
 type opts struct {
-	peers    []client.NodeInfo
-	peerFile string
-	dsn      string
+	peers      []client.NodeInfo
+	peerFile   string
+	dsn        string
+	driverName string // If not empty, use a pre-registered dqlite driver
 }
 
 func AddPeers(ctx context.Context, nodeStore client.NodeStore, additionalPeers ...client.NodeInfo) error {
@@ -86,16 +87,19 @@ func New(ctx context.Context, datasourceName string) (server.Backend, error) {
 		return nil, errors.Wrap(err, "add peers")
 	}
 
-	d, err := driver.New(nodeStore,
-		driver.WithLogFunc(Logger),
-		driver.WithContext(ctx),
-		driver.WithDialFunc(Dialer))
-	if err != nil {
-		return nil, errors.Wrap(err, "new dqlite driver")
+	if opts.driverName == "" {
+		opts.driverName = "dqlite"
+		d, err := driver.New(nodeStore,
+			driver.WithLogFunc(Logger),
+			driver.WithContext(ctx),
+			driver.WithDialFunc(Dialer))
+		if err != nil {
+			return nil, errors.Wrap(err, "new dqlite driver")
+		}
+		sql.Register(opts.driverName, d)
 	}
 
-	sql.Register("dqlite", d)
-	backend, generic, err := sqlite.NewVariant(ctx, "dqlite", opts.dsn)
+	backend, generic, err := sqlite.NewVariant(ctx, opts.driverName, opts.dsn)
 	if err != nil {
 		return nil, errors.Wrap(err, "sqlite client")
 	}
@@ -227,6 +231,9 @@ func parseOpts(dsn string) (opts, error) {
 			delete(values, k)
 		case "peer-file":
 			result.peerFile = vs[0]
+			delete(values, k)
+		case "driver-name":
+			result.driverName = vs[0]
 			delete(values, k)
 		}
 	}
