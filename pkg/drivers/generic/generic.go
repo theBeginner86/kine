@@ -209,7 +209,13 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 }
 
 func (d *Generic) query(ctx context.Context, sql string, args ...interface{}) (rows *sql.Rows, err error) {
-	for i := uint(0); i < 500; i++ {
+	i := uint(0)
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("query (try: %d): %w", i, err)
+		}
+	}()
+	for ; i < 500; i++ {
 		if i > 2 {
 			logrus.Debugf("QUERY (try: %d) %v : %s", i, args, Stripped(sql))
 		} else {
@@ -226,7 +232,13 @@ func (d *Generic) query(ctx context.Context, sql string, args ...interface{}) (r
 }
 
 func (d *Generic) queryInt64(ctx context.Context, sql string, args ...interface{}) (n int64, err error) {
-	for i := uint(0); i < 500; i++ {
+	i := uint(0)
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("query int64 (try: %d): %w", i, err)
+		}
+	}()
+	for ; i < 500; i++ {
 		if i > 2 {
 			logrus.Debugf("QUERY INT64 (try: %d) %v : %s", i, args, Stripped(sql))
 		} else {
@@ -244,12 +256,18 @@ func (d *Generic) queryInt64(ctx context.Context, sql string, args ...interface{
 }
 
 func (d *Generic) execute(ctx context.Context, sql string, args ...interface{}) (result sql.Result, err error) {
+	i := uint(0)
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("exec (try: %d): %w", i, err)
+		}
+	}()
 	if d.LockWrites {
 		d.Lock()
 		defer d.Unlock()
 	}
 
-	for i := uint(0); i < 500; i++ {
+	for ; i < 500; i++ {
 		if i > 2 {
 			logrus.Debugf("EXEC (try: %d) %v : %s", i, args, Stripped(sql))
 		} else {
@@ -316,9 +334,15 @@ func (d *Generic) Count(ctx context.Context, prefix string) (int64, int64, error
 		rev sql.NullInt64
 		id  int64
 		err error
+		i   uint
 	)
 
-	for i := uint(0); i < 500; i++ {
+	for ; i < 500; i++ {
+		if i > 0 {
+			logrus.Debugf("COUNT (try: %d) : %s", i, prefix)
+		} else {
+			logrus.Tracef("COUNT (try: %d) : %s", i, prefix)
+		}
 		row := d.DB.QueryRowContext(ctx, d.CountSQL, prefix, false)
 		err = row.Scan(&rev, &id)
 		if err != nil && d.Retry != nil && d.Retry(err) {
@@ -326,6 +350,9 @@ func (d *Generic) Count(ctx context.Context, prefix string) (int64, int64, error
 			continue
 		}
 		break
+	}
+	if err != nil {
+		err = fmt.Errorf("count %s (try: %d): %w", prefix, i, err)
 	}
 	return rev.Int64, id, err
 }
