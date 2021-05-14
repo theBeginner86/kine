@@ -3,8 +3,8 @@
 package dqlite
 
 import (
-
 	"context"
+	crypto_tls "crypto/tls"
 	"crypto/x509"
 	"database/sql"
 	"fmt"
@@ -13,7 +13,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	crypto_tls "crypto/tls"
 
 	"github.com/canonical/go-dqlite"
 	"github.com/canonical/go-dqlite/app"
@@ -40,9 +39,10 @@ func init() {
 }
 
 type opts struct {
-	peers    []client.NodeInfo
-	peerFile string
-	dsn      string
+	peers      []client.NodeInfo
+	peerFile   string
+	dsn        string
+	driverName string // If not empty, use a pre-registered dqlite driver
 }
 
 func AddPeers(ctx context.Context, nodeStore client.NodeStore, additionalPeers ...client.NodeInfo) error {
@@ -93,21 +93,23 @@ func New(ctx context.Context, datasourceName string, tlsInfo tls.Config, connPoo
 		return nil, errors.Wrap(err, "add peers")
 	}
 
-	dial, err := getDialer(tlsInfo)
-	if err != nil {
-		return nil, err
+	if opts.driverName == "" {
+		opts.driverName = "dqlite"
+		dial, err := getDialer(tlsInfo)
+		if err != nil {
+			return nil, err
+		}
+		d, err := driver.New(nodeStore,
+			driver.WithLogFunc(Logger),
+			driver.WithContext(ctx),
+			dial)
+		if err != nil {
+			return nil, errors.Wrap(err, "new dqlite driver")
+		}
+		sql.Register(opts.driverName, d)
 	}
 
-	d, err := driver.New(nodeStore,
-		driver.WithLogFunc(Logger),
-		driver.WithContext(ctx),
-		dial)
-	if err != nil {
-		return nil, errors.Wrap(err, "new dqlite driver")
-	}
-
-	sql.Register("dqlite", d)
-	backend, generic, err := sqlite.NewVariant(ctx, "dqlite", opts.dsn, connPoolConfig)
+	backend, generic, err := sqlite.NewVariant(ctx, opts.driverName, opts.dsn, connPoolConfig)
 	if err != nil {
 		return nil, errors.Wrap(err, "sqlite client")
 	}
