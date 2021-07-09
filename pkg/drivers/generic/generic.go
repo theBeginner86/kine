@@ -94,6 +94,8 @@ type Generic struct {
 	InsertLastInsertIDSQL string
 	Retry                 ErrRetry
 	TranslateErr          TranslateErr
+	CompactInterval       time.Duration
+	EventPollInterval       time.Duration
 }
 
 func q(sql, param string, numbered bool) string {
@@ -298,6 +300,16 @@ func (d *Generic) SetCompactRevision(ctx context.Context, revision int64) error 
 	logrus.Tracef("SETCOMPACTREVISION %v", revision)
 	_, err := d.execute(ctx, d.UpdateCompactSQL, revision)
 	return err
+}
+
+func (d *Generic) SetCompactInterval() time.Duration {
+	logrus.Tracef("SETCOMPACTDURATION")
+	return d.CompactInterval
+}
+
+func (d *Generic) SetEventPollInterval() time.Duration {
+	logrus.Tracef("SETEVENTDURATION")
+	return d.EventPollInterval
 }
 
 func (d *Generic) Compact(ctx context.Context, revision int64) (int64, error) {

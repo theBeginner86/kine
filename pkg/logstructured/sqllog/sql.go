@@ -47,6 +47,8 @@ type Dialect interface {
 	DeleteRevision(ctx context.Context, revision int64) error
 	GetCompactRevision(ctx context.Context) (int64, error)
 	SetCompactRevision(ctx context.Context, revision int64) error
+	SetCompactInterval() time.Duration
+	SetEventPollInterval() time.Duration
 	Compact(ctx context.Context, revision int64) (int64, error)
 	Fill(ctx context.Context, revision int64) error
 	IsFill(key string) bool
@@ -377,12 +379,14 @@ func (s *SQLLog) startWatch() (chan interface{}, error) {
 	c := make(chan interface{})
 	// start compaction and polling at the same time to watch starts
 	// at the oldest revision, but compaction doesn't create gaps
+	compactInterval := s.d.SetCompactInterval()
+	eventInterval := s.d.SetEventPollInterval()
 	go s.compactor(compactInterval)
-	go s.poll(c, pollStart)
+	go s.poll(c, pollStart, eventInterval)
 	return c, nil
 }
 
-func (s *SQLLog) poll(result chan interface{}, pollStart int64) {
+func (s *SQLLog) poll(result chan interface{}, pollStart int64, pollInterval time.Duration) {
 	var (
 		last        = pollStart
 		skip        int64
@@ -390,7 +394,7 @@ func (s *SQLLog) poll(result chan interface{}, pollStart int64) {
 		waitForMore = true
 	)
 
-	wait := time.NewTicker(time.Second)
+	wait := time.NewTicker(pollInterval)
 	defer wait.Stop()
 	defer close(result)
 

@@ -13,6 +13,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/canonical/go-dqlite"
 	"github.com/canonical/go-dqlite/app"
@@ -39,10 +40,12 @@ func init() {
 }
 
 type opts struct {
-	peers      []client.NodeInfo
-	peerFile   string
-	dsn        string
-	driverName string // If not empty, use a pre-registered dqlite driver
+	peers           []client.NodeInfo
+	peerFile        string
+	dsn             string
+	driverName      string // If not empty, use a pre-registered dqlite driver
+	compactInterval time.Duration
+	pollInterval time.Duration
 }
 
 func AddPeers(ctx context.Context, nodeStore client.NodeStore, additionalPeers ...client.NodeInfo) error {
@@ -130,7 +133,8 @@ func New(ctx context.Context, datasourceName string, tlsInfo tls.Config, connPoo
 		}
 		return err
 	}
-
+	generic.CompactInterval = opts.compactInterval
+	generic.EventPollInterval = opts.pollInterval
 	return backend, nil
 }
 
@@ -232,6 +236,7 @@ func migrate(ctx context.Context, newDB *sql.DB) (exitErr error) {
 func parseOpts(dsn string) (opts, error) {
 	result := opts{
 		dsn: dsn,
+		compactInterval: 5 * time.Minute,
 	}
 
 	parts := strings.SplitN(dsn, "?", 2)
@@ -268,6 +273,20 @@ func parseOpts(dsn string) (opts, error) {
 			delete(values, k)
 		case "peer-file":
 			result.peerFile = vs[0]
+			delete(values, k)
+		case "compact-interval":
+			interval, err := strconv.ParseUint(vs[0], 10, 64)
+			if err != nil {
+				return result, errors.Wrapf(err, "failed to parse interval %s", vs[0])
+			}
+			result.compactInterval = time.Duration(interval) * time.Second
+			delete(values, k)
+		case "event-poll-interval":
+			interval, err := strconv.ParseUint(vs[0], 10, 64)
+			if err != nil {
+				return result, errors.Wrapf(err, "failed to parse poll interval %s", vs[0])
+			}
+			result.pollInterval = time.Duration(interval) * time.Second
 			delete(values, k)
 		}
 	}
