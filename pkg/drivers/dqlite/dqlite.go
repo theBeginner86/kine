@@ -6,17 +6,22 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"io/ioutil"
 	"net/url"
 	"os"
 	"strconv"
 	"strings"
+	crypto_tls "crypto/tls"
+	"crypto/x509"
 
 	"github.com/canonical/go-dqlite"
+	"github.com/canonical/go-dqlite/app"
 	"github.com/canonical/go-dqlite/client"
 	"github.com/canonical/go-dqlite/driver"
 	"github.com/pkg/errors"
 	"github.com/rancher/kine/pkg/drivers/sqlite"
 	"github.com/rancher/kine/pkg/server"
+	"github.com/rancher/kine/pkg/tls"
 	"github.com/sirupsen/logrus"
 )
 
@@ -67,7 +72,8 @@ outer:
 	return nil
 }
 
-func New(ctx context.Context, datasourceName string) (server.Backend, error) {
+func New(ctx context.Context, datasourceName string, tlsInfo tls.Config) (server.Backend, error) {
+	logrus.Printf("New kine for dqlite.")
 	opts, err := parseOpts(datasourceName)
 	if err != nil {
 		return nil, err
@@ -87,12 +93,17 @@ func New(ctx context.Context, datasourceName string) (server.Backend, error) {
 		return nil, errors.Wrap(err, "add peers")
 	}
 
+	logrus.Printf("DriverName is %s.", opts.driverName)
 	if opts.driverName == "" {
 		opts.driverName = "dqlite"
+		dial, err := getDialer(tlsInfo)
+		if err != nil {
+			return nil, err
+		}
 		d, err := driver.New(nodeStore,
 			driver.WithLogFunc(Logger),
 			driver.WithContext(ctx),
-			driver.WithDialFunc(Dialer))
+			dial)
 		if err != nil {
 			return nil, errors.Wrap(err, "new dqlite driver")
 		}
@@ -122,6 +133,34 @@ func New(ctx context.Context, datasourceName string) (server.Backend, error) {
 	}
 
 	return backend, nil
+}
+
+func getDialer(tlsInfo tls.Config) (driver.Option, error) {
+	dial := client.DefaultDialFunc
+	if (tlsInfo.CertFile != "" && tlsInfo.KeyFile == "") || (tlsInfo.KeyFile != "" && tlsInfo.CertFile == "") {
+		return nil, errors.New("both TLS certificate and key must be given")
+	}
+	if tlsInfo.CertFile != "" {
+		cert, err := crypto_tls.LoadX509KeyPair(tlsInfo.CertFile, tlsInfo.KeyFile)
+		if err != nil {
+			return nil, errors.New("bad certificate pair")
+		}
+
+		data, err := ioutil.ReadFile(tlsInfo.CertFile)
+		if err != nil {
+			return nil, errors.New("could not read certificate")
+		}
+
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM(data) {
+			return nil, errors.New("bad certificate")
+		}
+
+		config := app.SimpleDialTLSConfig(cert, pool)
+		dial = client.DialFuncWithTLS(dial, config)
+		logrus.Printf("dial set to DialFuncWithTLS")
+	}
+	return driver.WithDialFunc(dial), nil
 }
 
 func migrate(ctx context.Context, newDB *sql.DB) (exitErr error) {
