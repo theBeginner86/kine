@@ -126,7 +126,7 @@ func getKineStorageBackend(ctx context.Context, driver, dsn string, cfg Config) 
 		leaderElect = false
 		backend, err = sqlite.New(ctx, dsn)
 	case DQLiteBackend:
-		backend, err = dqlite.New(ctx, dsn)
+		backend, err = dqlite.New(ctx, dsn, cfg.Config)
 	case PostgresBackend:
 		backend, err = pgsql.New(ctx, dsn, cfg.Config)
 	case MySQLBackend:
