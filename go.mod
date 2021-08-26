@@ -1,4 +1,4 @@
-module github.com/k3s-io/kine
+module github.com/rancher/kine
 
 go 1.15
 
@@ -7,7 +7,8 @@ require (
 	github.com/canonical/go-dqlite v1.8.0
 	github.com/go-sql-driver/mysql v1.6.0
 	github.com/lib/pq v1.10.2
-	github.com/mattn/go-sqlite3 v1.14.4
+	github.com/mattn/go-sqlite3 v2.0.3+incompatible
+	github.com/peterh/liner v1.2.0 // indirect
 	github.com/pkg/errors v0.9.1
 	github.com/rancher/wrangler v0.8.3
 	github.com/sirupsen/logrus v1.7.0
