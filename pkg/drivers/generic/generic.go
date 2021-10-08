@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Rican7/retry/backoff"
 	"github.com/Rican7/retry/jitter"
 	"github.com/sirupsen/logrus"
 )
@@ -65,6 +66,8 @@ type TranslateErr func(error) error
 
 type Generic struct {
 	sync.Mutex
+
+	Backoff               backoff.Algorithm
 
 	LockWrites            bool
 	LastInsertID          bool
@@ -168,6 +171,8 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 	configureConnectionPooling(db)
 
 	return &Generic{
+		Backoff: backoff.Incremental(0*time.Millisecond, 1*time.Millisecond),
+
 		DB: db,
 
 		GetRevisionSQL: q(fmt.Sprintf(`
@@ -221,7 +226,7 @@ func (d *Generic) query(ctx context.Context, sql string, args ...interface{}) (r
 			err = fmt.Errorf("query (try: %d): %w", i, err)
 		}
 	}()
-	for ; i < 500; i++ {
+	for ; i < 65; i++ {
 		if i > 2 {
 			logrus.Debugf("QUERY (try: %d) %v : %s", i, args, Stripped(sql))
 		} else {
@@ -229,7 +234,8 @@ func (d *Generic) query(ctx context.Context, sql string, args ...interface{}) (r
 		}
 		rows, err = d.DB.QueryContext(ctx, sql, args...)
 		if err != nil && d.Retry != nil && d.Retry(err) {
-			time.Sleep(jitter.Deviation(nil, 0.3)(2 * time.Millisecond))
+			slack := jitter.Deviation(nil, 0.3)(2 * time.Millisecond)
+			time.Sleep(d.Backoff(i) + slack)
 			continue
 		}
 		return rows, err
@@ -244,7 +250,7 @@ func (d *Generic) queryInt64(ctx context.Context, sql string, args ...interface{
 			err = fmt.Errorf("query int64 (try: %d): %w", i, err)
 		}
 	}()
-	for ; i < 500; i++ {
+	for ; i < 65; i++ {
 		if i > 2 {
 			logrus.Debugf("QUERY INT64 (try: %d) %v : %s", i, args, Stripped(sql))
 		} else {
@@ -253,7 +259,8 @@ func (d *Generic) queryInt64(ctx context.Context, sql string, args ...interface{
 		row := d.DB.QueryRowContext(ctx, sql, args...)
 		err = row.Scan(&n)
 		if err != nil && d.Retry != nil && d.Retry(err) {
-			time.Sleep(jitter.Deviation(nil, 0.3)(2 * time.Millisecond))
+			slack := jitter.Deviation(nil, 0.3)(2 * time.Millisecond)
+			time.Sleep(d.Backoff(i) + slack)
 			continue
 		}
 		return n, err
@@ -273,7 +280,7 @@ func (d *Generic) execute(ctx context.Context, sql string, args ...interface{}) 
 		defer d.Unlock()
 	}
 
-	for ; i < 500; i++ {
+	for ; i < 65; i++ {
 		if i > 2 {
 			logrus.Debugf("EXEC (try: %d) %v : %s", i, args, Stripped(sql))
 		} else {
@@ -281,7 +288,8 @@ func (d *Generic) execute(ctx context.Context, sql string, args ...interface{}) 
 		}
 		result, err = d.DB.ExecContext(ctx, sql, args...)
 		if err != nil && d.Retry != nil && d.Retry(err) {
-			time.Sleep(jitter.Deviation(nil, 0.3)(2 * time.Millisecond))
+			slack := jitter.Deviation(nil, 0.3)(2 * time.Millisecond)
+			time.Sleep(d.Backoff(i) + slack)
 			continue
 		}
 		return result, err
@@ -343,7 +351,7 @@ func (d *Generic) Count(ctx context.Context, prefix string) (int64, int64, error
 		i   uint
 	)
 
-	for ; i < 500; i++ {
+	for ; i < 65; i++ {
 		if i > 0 {
 			logrus.Debugf("COUNT (try: %d) : %s", i, prefix)
 		} else {
@@ -352,7 +360,8 @@ func (d *Generic) Count(ctx context.Context, prefix string) (int64, int64, error
 		row := d.DB.QueryRowContext(ctx, d.CountSQL, prefix, false)
 		err = row.Scan(&rev, &id)
 		if err != nil && d.Retry != nil && d.Retry(err) {
-			time.Sleep(jitter.Deviation(nil, 0.3)(2 * time.Millisecond))
+			slack := jitter.Deviation(nil, 0.3)(2 * time.Millisecond)
+			time.Sleep(d.Backoff(i) + slack)
 			continue
 		}
 		break
