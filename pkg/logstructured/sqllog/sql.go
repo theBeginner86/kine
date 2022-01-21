@@ -39,6 +39,7 @@ type Dialect interface {
 	SetCompactRevision(ctx context.Context, revision int64) error
 	Fill(ctx context.Context, revision int64) error
 	IsFill(key string) bool
+	GetSize(ctx context.Context) (int64, error)
 }
 
 func (s *SQLLog) Start(ctx context.Context) (err error) {
@@ -516,4 +517,8 @@ func scan(rows *sql.Rows, rev *int64, compact *int64, event *server.Event) error
 
 	*compact = c.Int64
 	return nil
+}
+
+func (s *SQLLog) DbSize(ctx context.Context) (int64, error) {
+	return s.d.GetSize(ctx)
 }
