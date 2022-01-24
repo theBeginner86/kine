@@ -1,3 +1,4 @@
+//go:build cgo
 // +build cgo
 
 package sqlite
@@ -63,6 +64,7 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 		}
 		return err
 	}
+	dialect.GetSizeSQL = `SELECT sum(pgsize) FROM dbstat`
 
 	// this is the first SQL that will be executed on a new DB conn so
 	// loop on failure here because in the case of dqlite it could still be initializing

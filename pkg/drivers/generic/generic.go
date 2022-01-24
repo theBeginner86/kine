@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Rican7/retry/jitter"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -81,6 +82,7 @@ type Generic struct {
 	InsertSQL             string
 	FillSQL               string
 	InsertLastInsertIDSQL string
+	GetSizeSQL            string
 	Retry                 ErrRetry
 	TranslateErr          TranslateErr
 }
@@ -416,4 +418,11 @@ func (d *Generic) Insert(ctx context.Context, key string, create, delete bool, c
 
 	id, err = d.queryInt64(ctx, d.InsertSQL, key, cVal, dVal, createRevision, previousRevision, ttl, value, prevValue)
 	return id, err
+}
+
+func (d *Generic) GetSize(ctx context.Context) (int64, error) {
+	if d.GetSizeSQL == "" {
+		return 0, errors.New("driver does not support size reporting")
+	}
+	return d.queryInt64(ctx, d.GetSizeSQL)
 }

@@ -1,9 +1,12 @@
+//go:build dqlite
 // +build dqlite
 
 package dqlite
 
 import (
 	"context"
+	crypto_tls "crypto/tls"
+	"crypto/x509"
 	"database/sql"
 	"fmt"
 	"io/ioutil"
@@ -11,8 +14,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	crypto_tls "crypto/tls"
-	"crypto/x509"
 
 	"github.com/canonical/go-dqlite"
 	"github.com/canonical/go-dqlite/app"

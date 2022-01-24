@@ -33,6 +33,7 @@ func (k *KVServerBridge) Register(server *grpc.Server) {
 	etcdserverpb.RegisterLeaseServer(server, k)
 	etcdserverpb.RegisterWatchServer(server, k)
 	etcdserverpb.RegisterKVServer(server, k)
+	etcdserverpb.RegisterMaintenanceServer(server, k)
 
 	hsrv := health.NewServer()
 	hsrv.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
