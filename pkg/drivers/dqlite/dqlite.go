@@ -19,6 +19,7 @@ import (
 	"github.com/canonical/go-dqlite/app"
 	"github.com/canonical/go-dqlite/client"
 	"github.com/canonical/go-dqlite/driver"
+	"github.com/mattn/go-sqlite3"
 	"github.com/pkg/errors"
 	"github.com/rancher/kine/pkg/drivers/sqlite"
 	"github.com/rancher/kine/pkg/server"
@@ -121,9 +122,33 @@ func New(ctx context.Context, datasourceName string, tlsInfo tls.Config) (server
 
 	generic.LockWrites = true
 	generic.Retry = func(err error) bool {
+		// get the inner-most error if possible
+		err = errors.Cause(err)
+
 		if err, ok := err.(driver.Error); ok {
 			return err.Code == driver.ErrBusy
 		}
+
+		if err == sqlite3.ErrLocked || err == sqlite3.ErrBusy {
+			return true
+		}
+
+		if strings.Contains(err.Error(), "database is locked") {
+			return true
+		}
+
+		if strings.Contains(err.Error(), "cannot start a transaction within a transaction") {
+			return true
+		}
+
+		if strings.Contains(err.Error(), "bad connection") {
+			return true
+		}
+
+		if strings.Contains(err.Error(), "checkpoint in progress") {
+			return true
+		}
+
 		return false
 	}
 	generic.TranslateErr = func(err error) error {
