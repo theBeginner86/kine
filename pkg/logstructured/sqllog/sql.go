@@ -40,6 +40,9 @@ type Dialect interface {
 	Fill(ctx context.Context, revision int64) error
 	IsFill(key string) bool
 	GetSize(ctx context.Context) (int64, error)
+
+	GetCompactInterval() time.Duration
+	GetPollInterval() time.Duration
 }
 
 func (s *SQLLog) Start(ctx context.Context) (err error) {
@@ -97,7 +100,7 @@ func (s *SQLLog) compact() {
 	var (
 		nextEnd int64
 	)
-	t := time.NewTicker(5 * time.Minute)
+	t := time.NewTicker(s.d.GetCompactInterval())
 	nextEnd, _ = s.d.CurrentRevision(s.ctx)
 
 outer:
@@ -349,7 +352,7 @@ func (s *SQLLog) poll(result chan interface{}, pollStart int64) {
 		waitForMore = true
 	)
 
-	wait := time.NewTicker(time.Second)
+	wait := time.NewTicker(s.d.GetPollInterval())
 	defer wait.Stop()
 	defer close(result)
 

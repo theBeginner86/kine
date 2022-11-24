@@ -85,6 +85,11 @@ type Generic struct {
 	GetSizeSQL            string
 	Retry                 ErrRetry
 	TranslateErr          TranslateErr
+
+	// CompactInterval is interval between database compactions performed by kine.
+	CompactInterval time.Duration
+	// PollInterval is the event poll interval used by kine.
+	PollInterval time.Duration
 }
 
 func configureConnectionPooling(db *sql.DB) {
@@ -425,4 +430,18 @@ func (d *Generic) GetSize(ctx context.Context) (int64, error) {
 		return 0, errors.New("driver does not support size reporting")
 	}
 	return d.queryInt64(ctx, d.GetSizeSQL)
+}
+
+func (d *Generic) GetCompactInterval() time.Duration {
+	if v := d.CompactInterval; v > 0 {
+		return v
+	}
+	return 5 * time.Minute
+}
+
+func (d *Generic) GetPollInterval() time.Duration {
+	if v := d.PollInterval; v > 0 {
+		return v
+	}
+	return time.Second
 }

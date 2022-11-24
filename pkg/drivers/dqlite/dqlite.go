@@ -14,6 +14,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/canonical/go-dqlite"
 	"github.com/canonical/go-dqlite/app"
@@ -44,6 +45,9 @@ type opts struct {
 	peerFile   string
 	dsn        string
 	driverName string // If not empty, use a pre-registered dqlite driver
+
+	compactInterval time.Duration
+	pollInterval    time.Duration
 }
 
 func AddPeers(ctx context.Context, nodeStore client.NodeStore, additionalPeers ...client.NodeInfo) error {
@@ -158,6 +162,8 @@ func New(ctx context.Context, datasourceName string, tlsInfo tls.Config) (server
 		return err
 	}
 
+	generic.CompactInterval = opts.compactInterval
+	generic.PollInterval = opts.pollInterval
 	return backend, nil
 }
 
@@ -299,6 +305,20 @@ func parseOpts(dsn string) (opts, error) {
 			delete(values, k)
 		case "driver-name":
 			result.driverName = vs[0]
+			delete(values, k)
+		case "compact-interval":
+			d, err := time.ParseDuration(vs[0])
+			if err != nil {
+				return opts{}, fmt.Errorf("failed to parse compact-interval duration value %q: %w", vs[0], err)
+			}
+			result.compactInterval = d
+			delete(values, k)
+		case "poll-interval":
+			d, err := time.ParseDuration(vs[0])
+			if err != nil {
+				return opts{}, fmt.Errorf("failed to parse poll-interval duration value %q: %w", vs[0], err)
+			}
+			result.pollInterval = d
 			delete(values, k)
 		}
 	}
