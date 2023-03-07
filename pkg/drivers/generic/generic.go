@@ -17,18 +17,38 @@ import (
 
 var (
 	columns = "kv.id as theid, kv.name, kv.created, kv.deleted, kv.create_revision, kv.prev_revision, kv.lease, kv.value, kv.old_value"
-	revSQL  = `
-		SELECT rkv.id
-		FROM kine rkv
-		ORDER BY rkv.id
-		DESC LIMIT 1`
+	//revSQL  = `
+	//	SELECT rkv.id
+	//	FROM kine rkv
+	//	ORDER BY rkv.id
+	//	DESC LIMIT 1`
 
+	revSQL = `
+		SELECT MAX(rkv.id) AS id
+		FROM kine AS rkv` 
+
+	revisionIntervalSQL = `
+		SELECT (
+			SELECT crkv.prev_revision
+			FROM kine AS crkv
+			WHERE crkv.name = 'compact_rev_key'
+			ORDER BY prev_revision
+			DESC LIMIT 1
+		) AS low, (
+			SELECT id
+			FROM kine
+			ORDER BY id
+			DESC LIMIT 1
+		) AS high`
+
+	// remove
 	compactRevSQL = `
 		SELECT crkv.prev_revision
 		FROM kine crkv
 		WHERE crkv.name = 'compact_rev_key'
 		ORDER BY crkv.id DESC LIMIT 1`
 
+	// remove
 	idOfKey = `
 		AND mkv.id <= ? AND mkv.id > (
 			SELECT ikv.id
@@ -52,6 +72,45 @@ var (
 			  (kv.deleted = 0 OR ?)
 		ORDER BY kv.id ASC
 		`, revSQL, compactRevSQL, columns)
+
+	//listSQL = fmt.Sprintf(`
+	//	SELECT %s
+	//	FROM kine as kv
+	//		LEFT JOIN kine kv2
+	//			ON kv.name = kv2.name
+	//			AND kv.id < kv2.id
+	//	WHERE kv2.name IS NULL
+	//		AND kv.name >= ? AND kv.name < ?
+	//		AND (? OR kv.deleted = 0)
+	//		%%s
+	//	ORDER BY kv.id ASC
+	//	`, columns)
+
+	revisionAfterSQL = fmt.Sprintf(`
+		SELECT *
+		FROM (
+			SELECT %s
+			FROM kine AS kv
+			JOIN (
+				SELECT MAX(mkv.id) AS id
+				FROM kine AS mkv
+				WHERE mkv.name >= ? AND mkv.name < ?
+					AND mkv.id <= ?
+					AND mkv.id > (
+						SELECT ikv.id
+						FROM kine ikv
+						WHERE
+							ikv.name = ? AND
+							ikv.id <= ?
+						ORDER BY ikv.id DESC
+						LIMIT 1
+					)
+				GROUP BY mkv.name
+			) AS maxkv
+				ON maxkv.id = kv.id
+			WHERE ? OR kv.deleted = 0
+		) AS lkv
+		ORDER BY lkv.theid ASC`, columns)
 )
 
 type Stripped string
@@ -63,28 +122,48 @@ func (s Stripped) String() string {
 
 type ErrRetry func(error) bool
 type TranslateErr func(error) error
+type ErrCode func(error) string
+
 
 type Generic struct {
 	sync.Mutex
 
-	LockWrites            bool
-	LastInsertID          bool
-	DB                    *sql.DB
-	GetCurrentSQL         string
-	GetRevisionSQL        string
-	RevisionSQL           string
-	ListRevisionStartSQL  string
-	GetRevisionAfterSQL   string
-	CountSQL              string
-	AfterSQL              string
-	DeleteSQL             string
-	UpdateCompactSQL      string
-	InsertSQL             string
-	FillSQL               string
-	InsertLastInsertIDSQL string
-	GetSizeSQL            string
-	Retry                 ErrRetry
-	TranslateErr          TranslateErr
+	LockWrites            		bool
+	LastInsertID          		bool
+	DB                    		*sql.DB
+	GetCurrentSQL         		string
+	getCurrentSQLPrepared 		*sql.Stmt
+	GetRevisionSQL        		string
+	getRevisionSQLPrepared		*sql.Stmt
+	RevisionSQL           		string
+	revisionSQLPrepared		*sql.Stmt
+	ListRevisionStartSQL  		string
+	listRevisionStartSQLPrepared	*sql.Stmt
+	GetRevisionAfterSQL   		string
+	getRevisionAfterSQLPrepared	*sql.Stmt
+	CountSQL              		string
+	countSQLPrepared		*sql.Stmt
+	AfterSQLPrefixed		string
+	afterSQLPrefixedPrepared	*sql.Stmt
+	AfterSQL              		string
+	afterSQLPrepared		*sql.Stmt
+	DeleteSQL             		string
+	deleteSQLPrepared		*sql.Stmt
+	CompactSQL	      		string
+	compactSQLPrepared		*sql.Stmt
+	UpdateCompactSQL      		string
+	updateCompactSQLPrepared	*sql.Stmt
+	InsertSQL             		string
+	insertSQLPrepared		*sql.Stmt
+	FillSQL               		string
+	fillSQLPrepared			*sql.Stmt	
+	InsertLastInsertIDSQL 		string
+	insertLastInsertIDSQLPrepared	*sql.Stmt
+	GetSizeSQL            		string
+	getSizeSQLPrepared		*sql.Stmt
+	Retry                 		ErrRetry
+	TranslateErr          		TranslateErr
+	ErrCode		      		ErrCode
 
 	// CompactInterval is interval between database compactions performed by kine.
 	CompactInterval time.Duration
@@ -115,6 +194,16 @@ func q(sql, param string, numbered bool) string {
 }
 
 func (d *Generic) Migrate(ctx context.Context) {
+	var (
+		count = 0
+		countKV = d.queryRow(ctx, "SELECT COUNT(*) FROM key_value")
+		countKine = d.queryRow(ctx, "SELECT COUNT(*) FROM kine")
+	)
+
+	if err := countKV.Scan(&count); err!= nil || count == 0 {
+		return
+	}
+
 	count, err := d.queryInt64(ctx, "SELECT COUNT(*) FROM key_value")
 	if err != nil || count == 0 {
 		return
