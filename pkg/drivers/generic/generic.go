@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/k3s-io/kine/pkg/util"
 	"github.com/Rican7/retry/jitter"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -17,11 +18,6 @@ import (
 
 var (
 	columns = "kv.id as theid, kv.name, kv.created, kv.deleted, kv.create_revision, kv.prev_revision, kv.lease, kv.value, kv.old_value"
-	//revSQL  = `
-	//	SELECT rkv.id
-	//	FROM kine rkv
-	//	ORDER BY rkv.id
-	//	DESC LIMIT 1`
 
 	revSQL = `
 		SELECT MAX(rkv.id) AS id
@@ -73,6 +69,7 @@ var (
 		ORDER BY kv.id ASC
 		`, revSQL, compactRevSQL, columns)
 
+	// todo: figure out why this doesn't work:
 	//listSQL = fmt.Sprintf(`
 	//	SELECT %s
 	//	FROM kine as kv
@@ -143,8 +140,8 @@ type Generic struct {
 	getRevisionAfterSQLPrepared	*sql.Stmt
 	CountSQL              		string
 	countSQLPrepared		*sql.Stmt
-	AfterSQLPrefixed		string
-	afterSQLPrefixedPrepared	*sql.Stmt
+	AfterSQLPrefix			string
+	afterSQLPrefixPrepared		*sql.Stmt
 	AfterSQL              		string
 	afterSQLPrepared		*sql.Stmt
 	DeleteSQL             		string
@@ -196,30 +193,26 @@ func q(sql, param string, numbered bool) string {
 func (d *Generic) Migrate(ctx context.Context) {
 	var (
 		count = 0
+		// todo: these two queries are slow
 		countKV = d.queryRow(ctx, "SELECT COUNT(*) FROM key_value")
 		countKine = d.queryRow(ctx, "SELECT COUNT(*) FROM kine")
 	)
 
-	if err := countKV.Scan(&count); err!= nil || count == 0 {
+	if err := countKV.Scan(&count); err != nil || count == 0 {
 		return
 	}
 
-	count, err := d.queryInt64(ctx, "SELECT COUNT(*) FROM key_value")
-	if err != nil || count == 0 {
+	if err := countKine.Scan(&count); err != nil || count != 0 {
 		return
-	}
-
-	count, err = d.queryInt64(ctx, "SELECT COUNT(*) FROM kine")
-	if err != nil || count != 0 {
-		return
-	}
+	}	
 
 	logrus.Infof("Migrating content from old table")
-	_, err = d.execute(ctx,
+	_, err := d.execute(ctx,
 		`INSERT INTO kine(deleted, create_revision, prev_revision, name, value, created, lease)
-					SELECT 0, 0, 0, kv.name, kv.value, 1, CASE WHEN kv.ttl > 0 THEN 15 ELSE 0 END
-					FROM key_value kv
-						WHERE kv.id IN (SELECT MAX(kvd.id) FROM key_value kvd GROUP BY kvd.name)`)
+		SELECT 0, 0, 0, kv.name, kv.value, 1, CASE WHEN kv.ttl > 0 THEN 15 ELSE 0 END
+		FROM key_value kv
+			WHERE kv.id IN (SELECT MAX(kvd.id) FROM key_value kvd GROUP BY kvd.name)`)
+	
 	if err != nil {
 		logrus.Errorf("Migration failed: %v", err)
 	}
@@ -282,6 +275,22 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 				%s
 			) c`, revSQL, fmt.Sprintf(listSQL, "")), paramCharacter, numbered),
 
+		AfterSQLPrefix: q(fmt.Sprintf(`
+			SELECT %s
+			FROM kine AS kv
+			WHERE
+				kv.name >= ? AND kv.name < ?
+				AND kv.id > ?
+			ORDER BY kv.id ASC`, columns), paramCharacter, numbered),			
+
+		// todo: figure out why this doesn't work
+		//AfterSQL: q(fmt.Sprintf(`
+		//	SELECT %s
+		//		FROM kine AS kv
+		//		WHERE kv.id > ?
+		//		ORDER BY kv.id ASC
+		//	`, columns), paramCharacter, numbered),
+		
 		AfterSQL: q(fmt.Sprintf(`
 			SELECT (%s), (%s), %s
 			FROM kine kv
@@ -310,6 +319,89 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 	}, err
 }
 
+// Prepare uses the Dialect SQL queries and calls the backend database to produce prepared statements. 
+func (d* Generic) Prepare() error {
+	var	err error
+
+	d.getCurrentSQLPrepared, err = d.DB.Prepare(d.GetCurrentSQL)
+	if err != nil {
+		return err
+	}	
+
+	d.getRevisionSQLPrepared, err = d.DB.Prepare(d.GetRevisionSQL)
+	if err != nil {
+		return err
+	}
+
+	d.revisionSQLPrepared, err = d.DB.Prepare(d.RevisionSQL)
+	if err != nil {
+		return err
+	}
+
+	d.listRevisionStartSQLPrepared, err = d.DB.Prepare(d.ListRevisionStartSQL)
+	if err != nil {
+		return err
+	}
+
+	d.getRevisionAfterSQLPrepared, err = d.DB.Prepare(d.GetRevisionAfterSQL)
+	if err != nil {
+		return err
+	}
+
+	d.countSQLPrepared, err = d.DB.Prepare(d.CountSQL)
+	if err != nil {
+		return err
+	}
+
+	d.afterSQLPrefixPrepared, err = d.DB.Prepare(d.AfterSQLPrefix)
+	if err != nil {
+		return err
+	}
+
+	d.afterSQLPrepared, err = d.DB.Prepare(d.AfterSQL)
+	if err != nil {
+		return err
+	}
+
+	d.deleteSQLPrepared, err = d.DB.Prepare(d.DeleteSQL)
+	if err != nil {
+		return err
+	}
+
+	d.compactSQLPrepared, err = d.DB.Prepare(d.CompactSQL)
+	if err != nil {
+		return err
+	}
+
+	d.updateCompactSQLPrepared, err = d.DB.Prepare(d.UpdateCompactSQL)
+	if err != nil {
+		return err
+	}
+	
+	d.insertSQLPrepared, err = d.DB.Prepare(d.InsertSQL)
+	if err != nil {
+		return err
+	}
+	
+	d.fillSQLPrepared, err = d.DB.Prepare(d.FillSQL)
+	if err != nil {
+		return err
+	}
+
+	d.insertLastInsertIDSQLPrepared, err = d.DB.Prepare(d.InsertLastInsertIDSQL)
+	if err != nil {
+		return err
+	}
+
+	d.getSizeSQLPrepared, err = d.DB.Prepare(d.GetSizeSQL)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+
 func (d *Generic) query(ctx context.Context, sql string, args ...interface{}) (rows *sql.Rows, err error) {
 	i := uint(0)
 	defer func() {
@@ -331,6 +423,11 @@ func (d *Generic) query(ctx context.Context, sql string, args ...interface{}) (r
 		return rows, err
 	}
 	return
+}
+
+func (d* Generic) queryRow(ctx context.Context, sql string, args ...interface{})(result *sql.Row) {
+	logrus.Tracef("QUERY ROW %v : %s", args, util.Stripped(sql))
+	return d.DB.QueryRowContext(ctx, sql, args...)	
 }
 
 func (d *Generic) queryInt64(ctx context.Context, sql string, args ...interface{}) (n int64, err error) {
