@@ -401,7 +401,12 @@ func (d* Generic) Prepare() error {
 	return nil
 }
 
+func (d *Generic) queryPrepared(ctx context.Context, sql string, prepared *sql.Stmt, args ...interface{})(result *sql.Rows, err error) {
+	logrus.Tracef("QUERY %v : %s", args, util.Stripped(sql))
+	return prepared.QueryContext(ctx, args...)
+}
 
+// todo: this method is very different in latest Kine - revise. 
 func (d *Generic) query(ctx context.Context, sql string, args ...interface{}) (rows *sql.Rows, err error) {
 	i := uint(0)
 	defer func() {
@@ -430,6 +435,11 @@ func (d* Generic) queryRow(ctx context.Context, sql string, args ...interface{})
 	return d.DB.QueryRowContext(ctx, sql, args...)	
 }
 
+func (d* Generic) queryRowPrepared(ctx context.Context, sql string, prepared *sql.Stmt, args ...interface{})(result *sql.Row) {
+	logrus.Tracef("QUERY %v : %s", args, util.Stripped(sql))
+	return prepared.QueryRowContext(ctx, args...)
+}
+
 func (d *Generic) queryInt64(ctx context.Context, sql string, args ...interface{}) (n int64, err error) {
 	i := uint(0)
 	defer func() {
@@ -454,6 +464,7 @@ func (d *Generic) queryInt64(ctx context.Context, sql string, args ...interface{
 	return
 }
 
+// todo: this method is different in latest Kine - revise
 func (d *Generic) execute(ctx context.Context, sql string, args ...interface{}) (result sql.Result, err error) {
 	i := uint(0)
 	defer func() {
@@ -473,6 +484,34 @@ func (d *Generic) execute(ctx context.Context, sql string, args ...interface{}) 
 			logrus.Tracef("EXEC (try: %d) %v : %s", i, args, Stripped(sql))
 		}
 		result, err = d.DB.ExecContext(ctx, sql, args...)
+		if err != nil && d.Retry != nil && d.Retry(err) {
+			time.Sleep(jitter.Deviation(nil, 0.3)(2 * time.Millisecond))
+			continue
+		}
+		return result, err
+	}
+	return
+}
+
+func (d *Generic) executePrepared(ctx context.Context, sql string, prepared *sql.Stmt, args ...interface{}) (result sql.Result, err error) {
+	i := uint(0)
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("exec (try: %d): %w", i, err)
+		}
+	}()
+	if d.LockWrites {
+		d.Lock()
+		defer d.Unlock()
+	}
+
+	for ; i < 500; i++ {
+		if i > 2 {
+			logrus.Debugf("EXEC (try: %d) %v : %s", i, args, Stripped(sql))
+		} else {
+			logrus.Tracef("EXEC (try: %d) %v : %s", i, args, Stripped(sql))
+		}
+		result, err = prepared.ExecContext(ctx, args...)
 		if err != nil && d.Retry != nil && d.Retry(err) {
 			time.Sleep(jitter.Deviation(nil, 0.3)(2 * time.Millisecond))
 			continue
