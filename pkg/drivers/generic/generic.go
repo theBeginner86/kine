@@ -45,15 +45,16 @@ var (
 		ORDER BY crkv.id DESC LIMIT 1`
 
 	// remove
-	idOfKey = `
-		AND mkv.id <= ? AND mkv.id > (
-			SELECT ikv.id
-			FROM kine ikv
-			WHERE
-				ikv.name = ? AND
-				ikv.id <= ?
-			ORDER BY ikv.id DESC LIMIT 1)`
+	//idOfKey = `
+	//	AND mkv.id <= ? AND mkv.id > (
+	//		SELECT ikv.id
+	//		FROM kine ikv
+	//		WHERE
+	//			ikv.name = ? AND
+	//			ikv.id <= ?
+	//		ORDER BY ikv.id DESC LIMIT 1)`
 
+	// todo: remove after fixing ListCurrent()
 	listSQL = fmt.Sprintf(`SELECT (%s), (%s), %s
 		FROM kine kv
 		JOIN (
@@ -69,19 +70,18 @@ var (
 		ORDER BY kv.id ASC
 		`, revSQL, compactRevSQL, columns)
 
-	// todo: figure out why this doesn't work:
-	//listSQL = fmt.Sprintf(`
-	//	SELECT %s
-	//	FROM kine as kv
-	//		LEFT JOIN kine kv2
-	//			ON kv.name = kv2.name
-	//			AND kv.id < kv2.id
-	//	WHERE kv2.name IS NULL
-	//		AND kv.name >= ? AND kv.name < ?
-	//		AND (? OR kv.deleted = 0)
-	//		%%s
-	//	ORDER BY kv.id ASC
-	//	`, columns)
+	listSQLc = fmt.Sprintf(`
+		SELECT %s
+		FROM kine as kv
+			LEFT JOIN kine kv2
+				ON kv.name = kv2.name
+				AND kv.id < kv2.id
+		WHERE kv2.name IS NULL
+			AND kv.name >= ? AND kv.name < ?
+			AND (? OR kv.deleted = 0)
+			%%s
+		ORDER BY kv.id ASC
+		`, columns)
 
 	revisionAfterSQL = fmt.Sprintf(`
 		SELECT *
@@ -262,27 +262,26 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 		GetRevisionSQL: q(fmt.Sprintf(`
 			SELECT
 			0, 0, %s
-			FROM kine kv
+			FROM kine AS kv
 			WHERE kv.id = ?`, columns), paramCharacter, numbered),
 
 		GetCurrentSQL:        q(fmt.Sprintf(listSQL, ""), paramCharacter, numbered),
-		ListRevisionStartSQL: q(fmt.Sprintf(listSQL, "AND mkv.id <= ?"), paramCharacter, numbered),
+		ListRevisionStartSQL: q(fmt.Sprintf(listSQLc, "AND kv.id <= ?"), paramCharacter, numbered),
 		
 		GetRevisionAfterSQL:  q(revisionAfterSQL, paramCharacter, numbered),
 		// GetRevisionAfterSQL:  q(fmt.Sprintf(listSQL, idOfKey), paramCharacter, numbered),
 
-		// todo: figure out why this doesn't work
+		CountSQL: q(fmt.Sprintf(`
+			SELECT (%s), COUNT(*)
+			FROM (
+				%s
+			) c`, revSQL, fmt.Sprintf(listSQLc, "")), paramCharacter, numbered),
+
 		//CountSQL: q(fmt.Sprintf(`
-		//	SELECT (%s), COUNT(*)
+		//	SELECT (%s), COUNT(c.theid)
 		//	FROM (
 		//		%s
 		//	) c`, revSQL, fmt.Sprintf(listSQL, "")), paramCharacter, numbered),
-
-		CountSQL: q(fmt.Sprintf(`
-			SELECT (%s), COUNT(c.theid)
-			FROM (
-				%s
-			) c`, revSQL, fmt.Sprintf(listSQL, "")), paramCharacter, numbered),
 
 		AfterSQLPrefix: q(fmt.Sprintf(`
 			SELECT %s
@@ -345,10 +344,11 @@ func (d* Generic) Prepare() error {
 	//	return err
 	//}
 
-	//d.listRevisionStartSQLPrepared, err = d.DB.Prepare(d.ListRevisionStartSQL)
-	//if err != nil {
-	//	return err
-	//}
+	// todo: this doesn't seem to be used yet
+	d.listRevisionStartSQLPrepared, err = d.DB.Prepare(d.ListRevisionStartSQL)
+	if err != nil {
+		return err
+	}
 
 	// todo: this doesn't seem to be used yet
 	d.getRevisionAfterSQLPrepared, err = d.DB.Prepare(d.GetRevisionAfterSQL)
@@ -356,7 +356,6 @@ func (d* Generic) Prepare() error {
 		return err
 	}
 	
-	// todo: unused - fix the issue with Count() and sql strings
 	d.countSQLPrepared, err = d.DB.Prepare(d.CountSQL)
 	if err != nil {
 		return err
@@ -412,7 +411,6 @@ func (d* Generic) Prepare() error {
 
 	return nil
 }
-
 
 // note: this method follows latest Kine
 func (d *Generic) queryPrepared(ctx context.Context, sql string, prepared *sql.Stmt, args ...interface{})(result *sql.Rows, err error) {
@@ -594,62 +592,95 @@ func (d *Generic) ListCurrent(ctx context.Context, prefix string, limit int64, i
 	return d.query(ctx, sql, prefix, includeDeleted)
 }
 
+// todo: must use this one instead
+//func (d *Generic) ListCurrent(ctx context.Context, prefix string, limit int64, includeDeleted bool) (*sql.Rows, error) {
+//	sql := d.GetCurrentSQL
+//	start, end := getPrefixRange(prefix)
+//
+//	// todo: the check for limit could be done at the caller
+//	if limit > 0 {
+//		sql = fmt.Sprintf("%s LIMIT %d", sql, limit)
+//	}
+//
+//	return d.query(ctx, sql, start, end, includeDeleted)
+//}
+
+//func (d *Generic) List(ctx context.Context, prefix, startKey string, limit, revision int64, includeDeleted bool) (*sql.Rows, error) {
+//	if startKey == "" {
+//		sql := d.ListRevisionStartSQL
+//		if limit > 0 {
+//			sql = fmt.Sprintf("%s LIMIT %d", sql, limit)
+//		}
+//		return d.query(ctx, sql, prefix, revision, includeDeleted)
+//	}
+//
+//	sql := d.GetRevisionAfterSQL
+//	if limit > 0 {
+//		sql = fmt.Sprintf("%s LIMIT %d", sql, limit)
+//	}
+//	return d.query(ctx, sql, prefix, revision, startKey, revision, includeDeleted)
+//}
+
 func (d *Generic) List(ctx context.Context, prefix, startKey string, limit, revision int64, includeDeleted bool) (*sql.Rows, error) {
+	start, end := getPrefixRange(prefix)
+
 	if startKey == "" {
 		sql := d.ListRevisionStartSQL
+		// todo: can this be improved?
 		if limit > 0 {
 			sql = fmt.Sprintf("%s LIMIT %d", sql, limit)
 		}
-		return d.query(ctx, sql, prefix, revision, includeDeleted)
+		return d.query(ctx, sql, start, end, revision, includeDeleted)
 	}
 
 	sql := d.GetRevisionAfterSQL
+	// todo: can this be improved?
 	if limit > 0 {
 		sql = fmt.Sprintf("%s LIMIT %d", sql, limit)
 	}
-	return d.query(ctx, sql, prefix, revision, startKey, revision, includeDeleted)
+	return d.query(ctx, sql, start, end, revision, startKey, revision, includeDeleted)
 }
 
-func (d *Generic) Count(ctx context.Context, prefix string) (int64, int64, error) {
-	var (
-		rev sql.NullInt64
-		id  int64
-		err error
-		i   uint
-	)
-
-	for ; i < 500; i++ {
-		if i > 0 {
-			logrus.Debugf("COUNT (try: %d) : %s", i, prefix)
-		} else {
-			logrus.Tracef("COUNT (try: %d) : %s", i, prefix)
-		}
-		row := d.DB.QueryRowContext(ctx, d.CountSQL, prefix, false)
-		err = row.Scan(&rev, &id)
-		if err != nil && d.Retry != nil && d.Retry(err) {
-			time.Sleep(jitter.Deviation(nil, 0.3)(2 * time.Millisecond))
-			continue
-		}
-		break
-	}
-	if err != nil {
-		err = fmt.Errorf("count %s (try: %d): %w", prefix, i, err)
-	}
-	return rev.Int64, id, err
-}
 
 //func (d *Generic) Count(ctx context.Context, prefix string) (int64, int64, error) {
 //	var (
 //		rev sql.NullInt64
 //		id  int64
+//		err error
+//		i   uint
 //	)
 //
-//	start, end := getPrefixRange(prefix)	
-//	
-//	row := d.queryRowPrepared(ctx, d.CountSQL, d.countSQLPrepared, start, end, false)
-//	err := row.Scan(&rev, &id)
+//	for ; i < 500; i++ {
+//		if i > 0 {
+//			logrus.Debugf("COUNT (try: %d) : %s", i, prefix)
+//		} else {
+//			logrus.Tracef("COUNT (try: %d) : %s", i, prefix)
+//		}
+//		row := d.DB.QueryRowContext(ctx, d.CountSQL, prefix, false)
+//		err = row.Scan(&rev, &id)
+//		if err != nil && d.Retry != nil && d.Retry(err) {
+//			time.Sleep(jitter.Deviation(nil, 0.3)(2 * time.Millisecond))
+//			continue
+//		}
+//		break
+//	}
+//	if err != nil {
+//		err = fmt.Errorf("count %s (try: %d): %w", prefix, i, err)
+//	}
 //	return rev.Int64, id, err
 //}
+
+func (d *Generic) Count(ctx context.Context, prefix string) (int64, int64, error) {
+	var (
+		rev sql.NullInt64
+		id  int64
+	)
+
+	start, end := getPrefixRange(prefix)	
+	row := d.queryRowPrepared(ctx, d.CountSQL, d.countSQLPrepared, start, end, false)
+	err := row.Scan(&rev, &id)
+	return rev.Int64, id, err
+}
 
 //func (d *Generic) CurrentRevision(ctx context.Context) (int64, error) {
 //	id, err := d.queryInt64(ctx, revSQL)
