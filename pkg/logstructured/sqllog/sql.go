@@ -11,6 +11,11 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// note: added acc to upstream
+const (
+	pollBatchSize	= 500	
+)
+
 type SQLLog struct {
 	d           Dialect
 	broadcaster broadcaster.Broadcaster
@@ -31,7 +36,10 @@ type Dialect interface {
 	List(ctx context.Context, prefix, startKey string, limit, revision int64, includeDeleted bool) (*sql.Rows, error)
 	Count(ctx context.Context, prefix string) (int64, int64, error)
 	CurrentRevision(ctx context.Context) (int64, error)
-	After(ctx context.Context, prefix string, rev, limit int64) (*sql.Rows, error)
+	AfterPrefix(ctx context.Context, prefix string, rev, limit int64) (*sql.Rows, error)
+	After(ctx context.Context, rev, limit int64) (*sql.Rows, error)
+	//After(ctx context.Context, prefix string, rev, limit int64) (*sql.Rows, error)
+
 	Insert(ctx context.Context, key string, create, delete bool, createRevision, previousRevision int64, ttl int64, value, prevValue []byte) (int64, error)
 	GetRevision(ctx context.Context, revision int64) (*sql.Rows, error)
 	DeleteRevision(ctx context.Context, revision int64) error
@@ -52,7 +60,8 @@ func (s *SQLLog) Start(ctx context.Context) (err error) {
 }
 
 func (s *SQLLog) compactStart(ctx context.Context) error {
-	rows, err := s.d.After(ctx, "compact_rev_key", 0, 0)
+	rows, err := s.d.AfterPrefix(ctx, "compact_rev_key", 0, 0)
+	//rows, err := s.d.After(ctx, "compact_rev_key", 0, 0)
 	if err != nil {
 		return err
 	}
@@ -208,7 +217,9 @@ func (s *SQLLog) After(ctx context.Context, prefix string, revision, limit int64
 		prefix += "%"
 	}
 
-	rows, err := s.d.After(ctx, prefix, revision, limit)
+	// note: modified acc to upstream - only this line - rest of the method is unchanged	
+	rows, err := s.d.AfterPrefix(ctx, prefix, revision, limit)
+	// rows, err := s.d.After(ctx, prefix, revision, limit)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -345,6 +356,7 @@ func (s *SQLLog) startWatch() (chan interface{}, error) {
 	return c, nil
 }
 
+// todo: may need to modify this method to match upstream
 func (s *SQLLog) poll(result chan interface{}, pollStart int64) {
 	var (
 		last        = pollStart
@@ -353,7 +365,9 @@ func (s *SQLLog) poll(result chan interface{}, pollStart int64) {
 		waitForMore = true
 	)
 
-	wait := time.NewTicker(s.d.GetPollInterval())
+	// note: modified acc to upstream
+	wait := time.NewTicker(time.Second)
+	// wait := time.NewTicker(s.d.GetPollInterval())
 	defer wait.Stop()
 	defer close(result)
 
@@ -370,8 +384,11 @@ func (s *SQLLog) poll(result chan interface{}, pollStart int64) {
 			}
 		}
 		waitForMore = true
-
-		rows, err := s.d.After(s.ctx, "%", last, 500)
+	
+		// note: modified acc to upstream, but using AfterPrefix instead of After
+		// so that we use the prefix % as is originally done	
+		rows, err := s.d.AfterPrefix(s.ctx, "%", last, pollBatchSize)
+		//rows, err := s.d.After(s.ctx, "%", last, 500)
 		if err != nil {
 			logrus.Errorf("fail to list latest changes: %v", err)
 			continue

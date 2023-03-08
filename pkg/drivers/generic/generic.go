@@ -269,6 +269,12 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 		ListRevisionStartSQL: q(fmt.Sprintf(listSQL, "AND mkv.id <= ?"), paramCharacter, numbered),
 		GetRevisionAfterSQL:  q(fmt.Sprintf(listSQL, idOfKey), paramCharacter, numbered),
 
+		//CountSQL: q(fmt.Sprintf(`
+		//	SELECT (%s), COUNT(*)
+		//	FROM (
+		//		%s
+		//	) c`, revSQL, fmt.Sprintf(listSQL, "")), paramCharacter, numbered),
+
 		CountSQL: q(fmt.Sprintf(`
 			SELECT (%s), COUNT(c.theid)
 			FROM (
@@ -284,20 +290,20 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 			ORDER BY kv.id ASC`, columns), paramCharacter, numbered),			
 
 		// todo: figure out why this doesn't work
-		//AfterSQL: q(fmt.Sprintf(`
-		//	SELECT %s
-		//		FROM kine AS kv
-		//		WHERE kv.id > ?
-		//		ORDER BY kv.id ASC
-		//	`, columns), paramCharacter, numbered),
-		
 		AfterSQL: q(fmt.Sprintf(`
-			SELECT (%s), (%s), %s
-			FROM kine kv
-			WHERE
-				kv.name LIKE ? AND
-				kv.id > ?
-			ORDER BY kv.id ASC`, revSQL, compactRevSQL, columns), paramCharacter, numbered),
+			SELECT %s
+				FROM kine AS kv
+				WHERE kv.id > ?
+				ORDER BY kv.id ASC
+			`, columns), paramCharacter, numbered),
+		
+		//AfterSQL: q(fmt.Sprintf(`
+		//	SELECT (%s), (%s), %s
+		//	FROM kine kv
+		//	WHERE
+		//		kv.name LIKE ? AND
+		//		kv.id > ?
+		//	ORDER BY kv.id ASC`, revSQL, compactRevSQL, columns), paramCharacter, numbered),
 
 		DeleteSQL: q(`
 			DELETE FROM kine
@@ -323,16 +329,18 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 func (d* Generic) Prepare() error {
 	var	err error
 
-	//d.getCurrentSQLPrepared, err = d.DB.Prepare(d.GetCurrentSQL)
-	//if err != nil {
-	//	return err
-	//}	
+	// todo: this doesn't seem to be used
+	d.getCurrentSQLPrepared, err = d.DB.Prepare(d.GetCurrentSQL)
+	if err != nil {
+		return err
+	}	
 
-	//d.getRevisionSQLPrepared, err = d.DB.Prepare(d.GetRevisionSQL)
-	//if err != nil {
-	//	return err
-	//}
+	d.getRevisionSQLPrepared, err = d.DB.Prepare(d.GetRevisionSQL)
+	if err != nil {
+		return err
+	}
 
+	// todo: d.RevisionSQL string is empty - does not seem to be used
 	//d.revisionSQLPrepared, err = d.DB.Prepare(d.RevisionSQL)
 	//if err != nil {
 	//	return err
@@ -348,10 +356,10 @@ func (d* Generic) Prepare() error {
 	//	return err
 	//}
 
-	//d.countSQLPrepared, err = d.DB.Prepare(d.CountSQL)
-	//if err != nil {
-	//	return err
-	//}
+	d.countSQLPrepared, err = d.DB.Prepare(d.CountSQL)
+	if err != nil {
+		return err
+	}
 
 	//d.afterSQLPrefixPrepared, err = d.DB.Prepare(d.AfterSQLPrefix)
 	//if err != nil {
@@ -397,9 +405,6 @@ func (d* Generic) Prepare() error {
 	if err != nil {
 		return err
 	}
-	//if d.getSizeSQLPrepared == nil {
-	//	fmt.Println("get size sql prepared is nil")
-	//}	
 
 	return nil
 }
@@ -558,8 +563,12 @@ func (d *Generic) SetCompactRevision(ctx context.Context, revision int64) error 
 	return err
 }
 
-func (d *Generic) GetRevision(ctx context.Context, revision int64) (*sql.Rows, error) {
-	return d.query(ctx, d.GetRevisionSQL, revision)
+//func (d *Generic) GetRevision(ctx context.Context, revision int64) (*sql.Rows, error) {
+//	return d.query(ctx, d.GetRevisionSQL, revision)
+//}
+
+func (d* Generic) GetRevision(ctx context.Context, revision int64)(*sql.Rows, error) {
+	return d.queryPrepared(ctx, d.GetRevisionSQL, d.getRevisionSQLPrepared, revision)
 }
 
 func (d *Generic) DeleteRevision(ctx context.Context, revision int64) error {
@@ -619,21 +628,62 @@ func (d *Generic) Count(ctx context.Context, prefix string) (int64, int64, error
 	return rev.Int64, id, err
 }
 
+//func (d *Generic) Count(ctx context.Context, prefix string) (int64, int64, error) {
+//	var (
+//		rev sql.NullInt64
+//		id  int64
+//	)
+//
+//	start, end := getPrefixRange(prefix)	
+//	
+//	row := d.queryRowPrepared(ctx, d.CountSQL, d.countSQLPrepared, start, end, false)
+//	err := row.Scan(&rev, &id)
+//	return rev.Int64, id, err
+//}
+
+//func (d *Generic) CurrentRevision(ctx context.Context) (int64, error) {
+//	id, err := d.queryInt64(ctx, revSQL)
+//	if err == sql.ErrNoRows {
+//		return 0, nil
+//	}
+//	return id, err
+//}
+
 func (d *Generic) CurrentRevision(ctx context.Context) (int64, error) {
-	id, err := d.queryInt64(ctx, revSQL)
+	var id int64
+	row := d.queryRow(ctx, revSQL)
+	err := row.Scan(&id)
 	if err == sql.ErrNoRows {
-		return 0, nil
+		return 0, nil	
 	}
 	return id, err
 }
 
-func (d *Generic) After(ctx context.Context, prefix string, rev, limit int64) (*sql.Rows, error) {
+func (d *Generic) AfterPrefix(ctx context.Context, prefix string, rev, limit int64) (*sql.Rows, error) {
+	start, end := getPrefixRange(prefix)	
+	sql := d.AfterSQLPrefix
+	if limit > 0 {
+		sql = fmt.Sprintf("%s LIMIT %d", sql, limit)
+	}
+	return d.query(ctx, sql, start, end, rev)
+}
+
+//func (d *Generic) After(ctx context.Context, prefix string, rev, limit int64) (*sql.Rows, error) {
+//	sql := d.AfterSQL
+//	if limit > 0 {
+//		sql = fmt.Sprintf("%s LIMIT %d", sql, limit)
+//	}
+//	return d.query(ctx, sql, prefix, rev)
+//}
+
+func (d *Generic) After(ctx context.Context, rev, limit int64) (*sql.Rows, error) {
 	sql := d.AfterSQL
 	if limit > 0 {
 		sql = fmt.Sprintf("%s LIMIT %d", sql, limit)
 	}
-	return d.query(ctx, sql, prefix, rev)
+	return d.query(ctx, sql, rev)
 }
+
 
 func (d *Generic) Fill(ctx context.Context, revision int64) error {
 	_, err := d.execute(ctx, d.FillSQL, revision, fmt.Sprintf("gap-%d", revision), 0, 1, 0, 0, 0, nil, nil)
@@ -713,3 +763,15 @@ func (d *Generic) GetPollInterval() time.Duration {
 	}
 	return time.Second
 }
+
+func getPrefixRange(prefix string) (start, end string) {
+	start = prefix
+	if strings.HasSuffix(prefix, "/") {
+		end = prefix[0:len(prefix)-1] + "0"
+	} else {
+		end = prefix + "\x00"
+	}
+	
+	return start, end
+}
+

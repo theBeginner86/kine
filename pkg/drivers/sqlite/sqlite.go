@@ -36,7 +36,7 @@ var (
 				value BLOB,
 				old_value BLOB
 			)`,
-		`CREATE INDEX IF NOT EXISTS kine_name_index ON kine (name)`,
+		`CREATE INDEX IF NOT EXISTS kine_name_index ON kine (name, id)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS kine_name_prev_revision_uindex ON kine (name, prev_revision)`,
 	}
 )
@@ -118,7 +118,7 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 
 	dialect.Migrate(context.Background())
 	if err := dialect.Prepare(); err != nil {
-		fmt.Println("Prepare() error")
+		fmt.Println("Prepare() error", err)
 		
 		return nil, nil, err
 	}
