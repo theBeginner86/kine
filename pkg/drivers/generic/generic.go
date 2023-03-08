@@ -267,8 +267,11 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 
 		GetCurrentSQL:        q(fmt.Sprintf(listSQL, ""), paramCharacter, numbered),
 		ListRevisionStartSQL: q(fmt.Sprintf(listSQL, "AND mkv.id <= ?"), paramCharacter, numbered),
-		GetRevisionAfterSQL:  q(fmt.Sprintf(listSQL, idOfKey), paramCharacter, numbered),
+		
+		GetRevisionAfterSQL:  q(revisionAfterSQL, paramCharacter, numbered),
+		// GetRevisionAfterSQL:  q(fmt.Sprintf(listSQL, idOfKey), paramCharacter, numbered),
 
+		// todo: figure out why this doesn't work
 		//CountSQL: q(fmt.Sprintf(`
 		//	SELECT (%s), COUNT(*)
 		//	FROM (
@@ -289,7 +292,6 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 				AND kv.id > ?
 			ORDER BY kv.id ASC`, columns), paramCharacter, numbered),			
 
-		// todo: figure out why this doesn't work
 		AfterSQL: q(fmt.Sprintf(`
 			SELECT %s
 				FROM kine AS kv
@@ -306,22 +308,19 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 		//	ORDER BY kv.id ASC`, revSQL, compactRevSQL, columns), paramCharacter, numbered),
 
 		DeleteSQL: q(`
-			DELETE FROM kine
-			WHERE id = ?`, paramCharacter, numbered),
+			DELETE FROM kine AS kv
+			WHERE kv.id = ?`, paramCharacter, numbered),
 
 		UpdateCompactSQL: q(`
 			UPDATE kine
 			SET prev_revision = ?
 			WHERE name = 'compact_rev_key'`, paramCharacter, numbered),
 
-		InsertLastInsertIDSQL: q(`INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
-			values(?, ?, ?, ?, ?, ?, ?, ?)`, paramCharacter, numbered),
+		InsertLastInsertIDSQL: q(`INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value) VALUES(?, ?, ?, ?, ?, ?, ?, ?)`, paramCharacter, numbered),
 
-		InsertSQL: q(`INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
-			values(?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`, paramCharacter, numbered),
+		InsertSQL: q(`INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value) VALUES(?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`, paramCharacter, numbered),
 
-		FillSQL: q(`INSERT INTO kine(id, name, created, deleted, create_revision, prev_revision, lease, value, old_value)
-			values(?, ?, ?, ?, ?, ?, ?, ?, ?)`, paramCharacter, numbered),
+		FillSQL: q(`INSERT INTO kine(id, name, created, deleted, create_revision, prev_revision, lease, value, old_value) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`, paramCharacter, numbered),
 	}, err
 }
 
@@ -329,7 +328,7 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 func (d* Generic) Prepare() error {
 	var	err error
 
-	// todo: this doesn't seem to be used
+	// todo: this doesn't seem to be used yet
 	d.getCurrentSQLPrepared, err = d.DB.Prepare(d.GetCurrentSQL)
 	if err != nil {
 		return err
@@ -351,30 +350,34 @@ func (d* Generic) Prepare() error {
 	//	return err
 	//}
 
-	//d.getRevisionAfterSQLPrepared, err = d.DB.Prepare(d.GetRevisionAfterSQL)
-	//if err != nil {
-	//	return err
-	//}
-
+	// todo: this doesn't seem to be used yet
+	d.getRevisionAfterSQLPrepared, err = d.DB.Prepare(d.GetRevisionAfterSQL)
+	if err != nil {
+		return err
+	}
+	
+	// todo: unused - fix the issue with Count() and sql strings
 	d.countSQLPrepared, err = d.DB.Prepare(d.CountSQL)
 	if err != nil {
 		return err
 	}
 
-	//d.afterSQLPrefixPrepared, err = d.DB.Prepare(d.AfterSQLPrefix)
-	//if err != nil {
-	//	return err
-	//}
+	// todo: this doesn't seem to be used yet
+	d.afterSQLPrefixPrepared, err = d.DB.Prepare(d.AfterSQLPrefix)
+	if err != nil {
+		return err
+	}
 
-	//d.afterSQLPrepared, err = d.DB.Prepare(d.AfterSQL)
-	//if err != nil {
-	//	return err
-	//}
+	// todo: this doesn't seem to be used yet
+	d.afterSQLPrepared, err = d.DB.Prepare(d.AfterSQL)
+	if err != nil {
+		return err
+	}
 
-	//d.deleteSQLPrepared, err = d.DB.Prepare(d.DeleteSQL)
-	//if err != nil {
-	//	return err
-	//}
+	d.deleteSQLPrepared, err = d.DB.Prepare(d.DeleteSQL)
+	if err != nil {
+		return err
+	}
 
 	//d.compactSQLPrepared, err = d.DB.Prepare(d.CompactSQL)
 	//if err != nil {
@@ -385,21 +388,22 @@ func (d* Generic) Prepare() error {
 	//if err != nil {
 	//	return err
 	//}
-	//
+
+	// todo: DB Prepare() seems to complain about query syntax near "RETURNING"	
 	//d.insertSQLPrepared, err = d.DB.Prepare(d.InsertSQL)
 	//if err != nil {
 	//	return err
 	//}
-	//
-	//d.fillSQLPrepared, err = d.DB.Prepare(d.FillSQL)
-	//if err != nil {
-	//	return err
-	//}
+	
+	d.fillSQLPrepared, err = d.DB.Prepare(d.FillSQL)
+	if err != nil {
+		return err
+	}
 
-	//d.insertLastInsertIDSQLPrepared, err = d.DB.Prepare(d.InsertLastInsertIDSQL)
-	//if err != nil {
-	//	return err
-	//}
+	d.insertLastInsertIDSQLPrepared, err = d.DB.Prepare(d.InsertLastInsertIDSQL)
+	if err != nil {
+		return err
+	}
 
 	d.getSizeSQLPrepared, err = d.DB.Prepare(d.GetSizeSQL)
 	if err != nil {
@@ -571,8 +575,14 @@ func (d* Generic) GetRevision(ctx context.Context, revision int64)(*sql.Rows, er
 	return d.queryPrepared(ctx, d.GetRevisionSQL, d.getRevisionSQLPrepared, revision)
 }
 
+//func (d *Generic) DeleteRevision(ctx context.Context, revision int64) error {
+//	_, err := d.execute(ctx, d.DeleteSQL, revision)
+//	return err
+//}
+
 func (d *Generic) DeleteRevision(ctx context.Context, revision int64) error {
-	_, err := d.execute(ctx, d.DeleteSQL, revision)
+	logrus.Tracef("DELETEREVISION %v", revision)	
+	_, err := d.executePrepared(ctx, d.DeleteSQL, d.deleteSQLPrepared, revision)
 	return err
 }
 
@@ -685,8 +695,13 @@ func (d *Generic) After(ctx context.Context, rev, limit int64) (*sql.Rows, error
 }
 
 
+//func (d *Generic) Fill(ctx context.Context, revision int64) error {
+//	_, err := d.execute(ctx, d.FillSQL, revision, fmt.Sprintf("gap-%d", revision), 0, 1, 0, 0, 0, nil, nil)
+//	return err
+//}
+
 func (d *Generic) Fill(ctx context.Context, revision int64) error {
-	_, err := d.execute(ctx, d.FillSQL, revision, fmt.Sprintf("gap-%d", revision), 0, 1, 0, 0, 0, nil, nil)
+	_, err := d.executePrepared(ctx, d.FillSQL, d.fillSQLPrepared, revision, fmt.Sprintf("gap-%d", revision), 0, 1, 0, 0, 0, nil, nil)
 	return err
 }
 
@@ -714,6 +729,8 @@ func (d *Generic) Insert(ctx context.Context, key string, create, delete bool, c
 
 	if d.LastInsertID {
 		row, err := d.execute(ctx, d.InsertLastInsertIDSQL, key, cVal, dVal, createRevision, previousRevision, ttl, value, prevValue)
+		//row, err := d.executePrepared(ctx, d.InsertLastInsertIDSQL, d.insertLastInsertIDSQLPrepared, key, cVal, dVal, createRevision, previousRevision, ttl, value, prevValue)
+	
 		if err != nil {
 			return 0, err
 		}
@@ -721,6 +738,8 @@ func (d *Generic) Insert(ctx context.Context, key string, create, delete bool, c
 	}
 
 	id, err = d.queryInt64(ctx, d.InsertSQL, key, cVal, dVal, createRevision, previousRevision, ttl, value, prevValue)
+	//row := d.queryRowPrepared(ctx, d.InsertSQL, d.insertSQLPrepared, key, cVal, dVal, createRevision, previousRevision, ttl, value, prevValue)
+	//err = row.Scan(&id)
 	return id, err
 }
 
