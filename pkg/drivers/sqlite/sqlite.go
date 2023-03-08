@@ -6,6 +6,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"os"
 	"time"
 
@@ -41,7 +42,7 @@ var (
 )
 
 func New(ctx context.Context, dataSourceName string) (server.Backend, error) {
-	backend, _, err := NewVariant(ctx, "sqlite3", dataSourceName)
+	backend, _, err := NewVariant(ctx, "sqlite3_wal_truncate", dataSourceName)
 	return backend, err
 }
 
@@ -50,13 +51,14 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 		if err := os.MkdirAll("./db", 0700); err != nil {
 			return nil, nil, err
 		}
-		dataSourceName = "./db/state.db?_journal=WAL&cache=shared"
+		dataSourceName = "./db/state.db?_timeout=30000&_txlock=immediate&_journal=WAL&cache=shared"
 	}
 
 	dialect, err := generic.Open(ctx, driverName, dataSourceName, "?", false)
 	if err != nil {
 		return nil, nil, err
 	}
+
 	dialect.LastInsertID = true
 	dialect.TranslateErr = func(err error) error {
 		if err, ok := err.(sqlite3.Error); ok && err.ExtendedCode == sqlite3.ErrConstraintUnique {
@@ -64,7 +66,33 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 		}
 		return err
 	}
-	dialect.GetSizeSQL = `SELECT sum(pgsize) FROM dbstat`
+	dialect.GetSizeSQL = `SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()`
+	dialect.CompactSQL = `
+		DELETE FROM kine AS kv
+		WHERE
+			kv.id IN (
+				SELECT kp.prev_revision AS id
+				FROM kine as kp
+				WHERE
+					kp.name != 'compact_rev_key' AND
+					kp.prev_revision != 0 AND
+					kp.id <= ?
+				UNION
+				SELECT kd.id AS id
+				FROM kine AS id
+				WHERE
+					kd.deleted != 0 AND
+					kd.id <= ?
+			)`
+	dialect.ErrCode = func(err error) string {
+		if err == nil {
+			return ""
+		}
+		if err, ok := err.(sqlite3.Error); ok {
+			return fmt.Sprint(err.ExtendedCode)
+		}
+		return err.Error()
+	}
 
 	// this is the first SQL that will be executed on a new DB conn so
 	// loop on failure here because in the case of dqlite it could still be initializing
@@ -89,6 +117,12 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 	//}
 
 	dialect.Migrate(context.Background())
+	if err := dialect.Prepare(); err != nil {
+		fmt.Println("Prepare() error")
+		
+		return nil, nil, err
+	}
+
 	return logstructured.New(sqllog.New(dialect)), dialect, nil
 }
 

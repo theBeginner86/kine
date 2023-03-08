@@ -323,112 +323,122 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 func (d* Generic) Prepare() error {
 	var	err error
 
-	d.getCurrentSQLPrepared, err = d.DB.Prepare(d.GetCurrentSQL)
-	if err != nil {
-		return err
-	}	
+	//d.getCurrentSQLPrepared, err = d.DB.Prepare(d.GetCurrentSQL)
+	//if err != nil {
+	//	return err
+	//}	
 
-	d.getRevisionSQLPrepared, err = d.DB.Prepare(d.GetRevisionSQL)
-	if err != nil {
-		return err
-	}
+	//d.getRevisionSQLPrepared, err = d.DB.Prepare(d.GetRevisionSQL)
+	//if err != nil {
+	//	return err
+	//}
 
-	d.revisionSQLPrepared, err = d.DB.Prepare(d.RevisionSQL)
-	if err != nil {
-		return err
-	}
+	//d.revisionSQLPrepared, err = d.DB.Prepare(d.RevisionSQL)
+	//if err != nil {
+	//	return err
+	//}
 
-	d.listRevisionStartSQLPrepared, err = d.DB.Prepare(d.ListRevisionStartSQL)
-	if err != nil {
-		return err
-	}
+	//d.listRevisionStartSQLPrepared, err = d.DB.Prepare(d.ListRevisionStartSQL)
+	//if err != nil {
+	//	return err
+	//}
 
-	d.getRevisionAfterSQLPrepared, err = d.DB.Prepare(d.GetRevisionAfterSQL)
-	if err != nil {
-		return err
-	}
+	//d.getRevisionAfterSQLPrepared, err = d.DB.Prepare(d.GetRevisionAfterSQL)
+	//if err != nil {
+	//	return err
+	//}
 
-	d.countSQLPrepared, err = d.DB.Prepare(d.CountSQL)
-	if err != nil {
-		return err
-	}
+	//d.countSQLPrepared, err = d.DB.Prepare(d.CountSQL)
+	//if err != nil {
+	//	return err
+	//}
 
-	d.afterSQLPrefixPrepared, err = d.DB.Prepare(d.AfterSQLPrefix)
-	if err != nil {
-		return err
-	}
+	//d.afterSQLPrefixPrepared, err = d.DB.Prepare(d.AfterSQLPrefix)
+	//if err != nil {
+	//	return err
+	//}
 
-	d.afterSQLPrepared, err = d.DB.Prepare(d.AfterSQL)
-	if err != nil {
-		return err
-	}
+	//d.afterSQLPrepared, err = d.DB.Prepare(d.AfterSQL)
+	//if err != nil {
+	//	return err
+	//}
 
-	d.deleteSQLPrepared, err = d.DB.Prepare(d.DeleteSQL)
-	if err != nil {
-		return err
-	}
+	//d.deleteSQLPrepared, err = d.DB.Prepare(d.DeleteSQL)
+	//if err != nil {
+	//	return err
+	//}
 
-	d.compactSQLPrepared, err = d.DB.Prepare(d.CompactSQL)
-	if err != nil {
-		return err
-	}
+	//d.compactSQLPrepared, err = d.DB.Prepare(d.CompactSQL)
+	//if err != nil {
+	//	return err
+	//}
 
-	d.updateCompactSQLPrepared, err = d.DB.Prepare(d.UpdateCompactSQL)
-	if err != nil {
-		return err
-	}
-	
-	d.insertSQLPrepared, err = d.DB.Prepare(d.InsertSQL)
-	if err != nil {
-		return err
-	}
-	
-	d.fillSQLPrepared, err = d.DB.Prepare(d.FillSQL)
-	if err != nil {
-		return err
-	}
+	//d.updateCompactSQLPrepared, err = d.DB.Prepare(d.UpdateCompactSQL)
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//d.insertSQLPrepared, err = d.DB.Prepare(d.InsertSQL)
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//d.fillSQLPrepared, err = d.DB.Prepare(d.FillSQL)
+	//if err != nil {
+	//	return err
+	//}
 
-	d.insertLastInsertIDSQLPrepared, err = d.DB.Prepare(d.InsertLastInsertIDSQL)
-	if err != nil {
-		return err
-	}
+	//d.insertLastInsertIDSQLPrepared, err = d.DB.Prepare(d.InsertLastInsertIDSQL)
+	//if err != nil {
+	//	return err
+	//}
 
 	d.getSizeSQLPrepared, err = d.DB.Prepare(d.GetSizeSQL)
 	if err != nil {
 		return err
 	}
+	//if d.getSizeSQLPrepared == nil {
+	//	fmt.Println("get size sql prepared is nil")
+	//}	
 
 	return nil
 }
 
+
+// note: this method follows latest Kine
 func (d *Generic) queryPrepared(ctx context.Context, sql string, prepared *sql.Stmt, args ...interface{})(result *sql.Rows, err error) {
 	logrus.Tracef("QUERY %v : %s", args, util.Stripped(sql))
 	return prepared.QueryContext(ctx, args...)
 }
 
-// todo: this method is very different in latest Kine - revise. 
-func (d *Generic) query(ctx context.Context, sql string, args ...interface{}) (rows *sql.Rows, err error) {
-	i := uint(0)
-	defer func() {
-		if err != nil {
-			err = fmt.Errorf("query (try: %d): %w", i, err)
-		}
-	}()
-	for ; i < 500; i++ {
-		if i > 2 {
-			logrus.Debugf("QUERY (try: %d) %v : %s", i, args, Stripped(sql))
-		} else {
-			logrus.Tracef("QUERY (try: %d) %v : %s", i, args, Stripped(sql))
-		}
-		rows, err = d.DB.QueryContext(ctx, sql, args...)
-		if err != nil && d.Retry != nil && d.Retry(err) {
-			time.Sleep(jitter.Deviation(nil, 0.3)(2 * time.Millisecond))
-			continue
-		}
-		return rows, err
-	}
-	return
+func (d *Generic) query(ctx context.Context, sql string, args ...interface{})(rows *sql.Rows, err error) {
+	logrus.Tracef("QUERY %v : %s", args, util.Stripped(sql))
+	return d.DB.QueryContext(ctx, sql, args...)
 }
+
+// todo: this method is very different in latest Kine - revise. 
+//func (d *Generic) query(ctx context.Context, sql string, args ...interface{}) (rows *sql.Rows, err error) {
+//	i := uint(0)
+//	defer func() {
+//		if err != nil {
+//			err = fmt.Errorf("query (try: %d): %w", i, err)
+//		}
+//	}()
+//	for ; i < 500; i++ {
+//		if i > 2 {
+//			logrus.Debugf("QUERY (try: %d) %v : %s", i, args, Stripped(sql))
+//		} else {
+//			logrus.Tracef("QUERY (try: %d) %v : %s", i, args, Stripped(sql))
+//		}
+//		rows, err = d.DB.QueryContext(ctx, sql, args...)
+//		if err != nil && d.Retry != nil && d.Retry(err) {
+//			time.Sleep(jitter.Deviation(nil, 0.3)(2 * time.Millisecond))
+//			continue
+//		}
+//		return rows, err
+//	}
+//	return
+//}
 
 func (d* Generic) queryRow(ctx context.Context, sql string, args ...interface{})(result *sql.Row) {
 	logrus.Tracef("QUERY ROW %v : %s", args, util.Stripped(sql))
@@ -440,6 +450,7 @@ func (d* Generic) queryRowPrepared(ctx context.Context, sql string, prepared *sq
 	return prepared.QueryRowContext(ctx, args...)
 }
 
+// todo: this method outdated in latest Kind
 func (d *Generic) queryInt64(ctx context.Context, sql string, args ...interface{}) (n int64, err error) {
 	i := uint(0)
 	defer func() {
@@ -493,6 +504,7 @@ func (d *Generic) execute(ctx context.Context, sql string, args ...interface{}) 
 	return
 }
 
+// todo: adapt this method according to latest Kine
 func (d *Generic) executePrepared(ctx context.Context, sql string, prepared *sql.Stmt, args ...interface{}) (result sql.Result, err error) {
 	i := uint(0)
 	defer func() {
@@ -520,6 +532,18 @@ func (d *Generic) executePrepared(ctx context.Context, sql string, prepared *sql
 	}
 	return
 }
+
+// todo: figure out why this one doesn't work
+//func (d* Generic) GetCompactRevision(ctx context.Context)(int64, int64, error) {
+//	var compact, target sql.NullInt64
+//	row := d.queryRow(ctx, revisionIntervalSQL)
+//	err := row.Scan(&compact, &target)
+//	if err == sql.ErrNoRows {
+//		return 0, 0, nil
+//	}
+//	
+//	return compact.Int64, target.Int64, err
+//}
 
 func (d *Generic) GetCompactRevision(ctx context.Context) (int64, error) {
 	id, err := d.queryInt64(ctx, compactRevSQL)
@@ -650,12 +674,31 @@ func (d *Generic) Insert(ctx context.Context, key string, create, delete bool, c
 	return id, err
 }
 
-func (d *Generic) GetSize(ctx context.Context) (int64, error) {
+func (d *Generic) GetSize(ctx context.Context)(int64, error){
 	if d.GetSizeSQL == "" {
 		return 0, errors.New("driver does not support size reporting")
 	}
-	return d.queryInt64(ctx, d.GetSizeSQL)
+
+	if d.getSizeSQLPrepared == nil {
+		return 0, errors.New("internal error: prepared statement is nil when getting total size")
+	}
+	
+	var size int64
+	row := d.queryRowPrepared(ctx, d.GetSizeSQL, d.getSizeSQLPrepared)
+	
+	if err := row.Scan(&size); err != nil {
+		return 0, err
+	}
+	
+	return size, nil
 }
+
+//func (d *Generic) GetSize(ctx context.Context) (int64, error) {
+//	if d.GetSizeSQL == "" {
+//		return 0, errors.New("driver does not support size reporting")
+//	}
+//	return d.queryInt64(ctx, d.GetSizeSQL)
+//}
 
 func (d *Generic) GetCompactInterval() time.Duration {
 	if v := d.CompactInterval; v > 0 {
