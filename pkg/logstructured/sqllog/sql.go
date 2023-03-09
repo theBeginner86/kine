@@ -38,13 +38,10 @@ type Dialect interface {
 	CurrentRevision(ctx context.Context) (int64, error)
 	AfterPrefix(ctx context.Context, prefix string, rev, limit int64) (*sql.Rows, error)
 	After(ctx context.Context, rev, limit int64) (*sql.Rows, error)
-	//After(ctx context.Context, prefix string, rev, limit int64) (*sql.Rows, error)
-
 	Insert(ctx context.Context, key string, create, delete bool, createRevision, previousRevision int64, ttl int64, value, prevValue []byte) (int64, error)
 	GetRevision(ctx context.Context, revision int64) (*sql.Rows, error)
 	DeleteRevision(ctx context.Context, revision int64) error
 	GetCompactRevision(ctx context.Context) (int64, error)
-	//GetCompactRevision(ctx context.Context) (int64, int64, error)
 	SetCompactRevision(ctx context.Context, revision int64) error
 	Fill(ctx context.Context, revision int64) error
 	IsFill(key string) bool
@@ -61,7 +58,6 @@ func (s *SQLLog) Start(ctx context.Context) (err error) {
 
 func (s *SQLLog) compactStart(ctx context.Context) error {
 	rows, err := s.d.AfterPrefix(ctx, "compact_rev_key", 0, 0)
-	//rows, err := s.d.After(ctx, "compact_rev_key", 0, 0)
 	if err != nil {
 		return err
 	}
@@ -217,9 +213,7 @@ func (s *SQLLog) After(ctx context.Context, prefix string, revision, limit int64
 		prefix += "%"
 	}
 
-	// note: modified acc to upstream - only this line - rest of the method is unchanged	
 	rows, err := s.d.AfterPrefix(ctx, prefix, revision, limit)
-	// rows, err := s.d.After(ctx, prefix, revision, limit)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -365,9 +359,7 @@ func (s *SQLLog) poll(result chan interface{}, pollStart int64) {
 		waitForMore = true
 	)
 
-	// note: modified acc to upstream
 	wait := time.NewTicker(time.Second)
-	// wait := time.NewTicker(s.d.GetPollInterval())
 	defer wait.Stop()
 	defer close(result)
 
@@ -385,10 +377,7 @@ func (s *SQLLog) poll(result chan interface{}, pollStart int64) {
 		}
 		waitForMore = true
 	
-		// note: modified acc to upstream, but using AfterPrefix instead of After
-		// so that we use the prefix % as is originally done	
 		rows, err := s.d.AfterPrefix(s.ctx, "%", last, pollBatchSize)
-		//rows, err := s.d.After(s.ctx, "%", last, 500)
 		if err != nil {
 			logrus.Errorf("fail to list latest changes: %v", err)
 			continue
