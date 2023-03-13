@@ -1,6 +1,7 @@
 package test
 
 import (
+	"context"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -9,7 +10,8 @@ import (
 
 // TestGet is unit testing for the Get operation.
 func TestGet(t *testing.T) {
-	ctx, client := newKine(t)
+	ctx := context.Background()
+	client := newKine(t)
 
 	t.Run("FailMissing", func(t *testing.T) {
 		g := NewWithT(t)
@@ -45,7 +47,8 @@ func TestGet(t *testing.T) {
 
 // BenchmarkGet is a benchmark for the Get operation.
 func BenchmarkGet(b *testing.B) {
-	ctx, client := newKine(b)
+	ctx := context.Background()
+	client := newKine(b)
 	g := NewWithT(b)
 
 	// create a kv
@@ -58,9 +61,12 @@ func BenchmarkGet(b *testing.B) {
 		g.Expect(resp.Succeeded).To(BeTrue())
 	}
 
-	for i := 0; i < 10000; i++ {
-		resp, err := client.Get(ctx, "testKey", clientv3.WithRange(""))
-		g.Expect(err).To(BeNil())
-		g.Expect(resp.Kvs).To(HaveLen(1))
-	}
+	b.Run("LatestRevision", func(b *testing.B) {
+		g := NewWithT(b)
+		for i := 0; i < 50*b.N; i++ {
+			resp, err := client.Get(ctx, "testKey", clientv3.WithRange(""))
+			g.Expect(err).To(BeNil())
+			g.Expect(resp.Kvs).To(HaveLen(1))
+		}
+	})
 }

@@ -1,6 +1,7 @@
 package test
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -10,7 +11,8 @@ import (
 
 // TestCreate is unit testing for the create operation.
 func TestCreate(t *testing.T) {
-	ctx, client := newKine(t)
+	ctx := context.Background()
+	client := newKine(t)
 
 	t.Run("CreateOne", func(t *testing.T) {
 		g := NewWithT(t)
@@ -37,11 +39,11 @@ func TestCreate(t *testing.T) {
 
 // BenchmarkCreate is a benchmark for the Create operation.
 func BenchmarkCreate(b *testing.B) {
-	ctx, client := newKine(b)
+	ctx := context.Background()
+	client := newKine(b)
 
 	g := NewWithT(b)
-
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 50*b.N; i++ {
 		key := fmt.Sprintf("key-%d", i)
 		value := fmt.Sprintf("value-%d", i)
 		resp, err := client.Txn(ctx).

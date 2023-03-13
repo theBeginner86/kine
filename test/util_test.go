@@ -19,10 +19,10 @@ import (
 // newKine will panic in case of error
 //
 // newKine will return a context as well as a configured etcd client for the kine instance
-func newKine(tb testing.TB) (context.Context, *clientv3.Client) {
+func newKine(tb testing.TB) *clientv3.Client {
 	logrus.SetLevel(logrus.ErrorLevel)
 
-	dir, err := os.MkdirTemp("testdata", "*")
+	dir, err := os.MkdirTemp("testdata", "dir-*")
 	if err != nil {
 		panic(err)
 	}
@@ -50,5 +50,5 @@ func newKine(tb testing.TB) (context.Context, *clientv3.Client) {
 	if err != nil {
 		panic(err)
 	}
-	return context.Background(), client
+	return client
 }
