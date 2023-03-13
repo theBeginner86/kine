@@ -22,7 +22,8 @@ var (
 	revSQL = `
 		SELECT MAX(rkv.id) AS id
 		FROM kine AS rkv` 
-
+	
+	// For new additions to upstream kine for better compaction only - GetCompactRevision()
 	revisionIntervalSQL = `
 		SELECT (
 			SELECT crkv.prev_revision
@@ -37,22 +38,12 @@ var (
 			DESC LIMIT 1
 		) AS high`
 
-	// remove
+	// Needed by GetCompactRevision() and ListSQL
 	compactRevSQL = `
 		SELECT crkv.prev_revision
 		FROM kine crkv
 		WHERE crkv.name = 'compact_rev_key'
 		ORDER BY crkv.id DESC LIMIT 1`
-
-	// remove
-	//idOfKey = `
-	//	AND mkv.id <= ? AND mkv.id > (
-	//		SELECT ikv.id
-	//		FROM kine ikv
-	//		WHERE
-	//			ikv.name = ? AND
-	//			ikv.id <= ?
-	//		ORDER BY ikv.id DESC LIMIT 1)`
 
 	// todo: remove after fixing ListCurrent()
 	listSQL = fmt.Sprintf(`SELECT (%s), (%s), %s
@@ -70,6 +61,7 @@ var (
 		ORDER BY kv.id ASC
 		`, revSQL, compactRevSQL, columns)
 
+	// newer version of listSQL, now used by ListRevisionSQL and CountSQL 
 	listSQLc = fmt.Sprintf(`
 		SELECT %s
 		FROM kine as kv
@@ -83,6 +75,7 @@ var (
 		ORDER BY kv.id ASC
 		`, columns)
 
+	// new way to form RevisionAfterSQL, as opposed to listSQL+idOfKey
 	revisionAfterSQL = fmt.Sprintf(`
 		SELECT *
 		FROM (
@@ -207,6 +200,7 @@ func (d *Generic) Migrate(ctx context.Context) {
 	}	
 
 	logrus.Infof("Migrating content from old table")
+	// Migrate the latest revision rows from the old table to the new
 	_, err := d.execute(ctx,
 		`INSERT INTO kine(deleted, create_revision, prev_revision, name, value, created, lease)
 		SELECT 0, 0, 0, kv.name, kv.value, 1, CASE WHEN kv.ttl > 0 THEN 15 ELSE 0 END
@@ -269,19 +263,12 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 		ListRevisionStartSQL: q(fmt.Sprintf(listSQLc, "AND kv.id <= ?"), paramCharacter, numbered),
 		
 		GetRevisionAfterSQL:  q(revisionAfterSQL, paramCharacter, numbered),
-		// GetRevisionAfterSQL:  q(fmt.Sprintf(listSQL, idOfKey), paramCharacter, numbered),
 
 		CountSQL: q(fmt.Sprintf(`
 			SELECT (%s), COUNT(*)
 			FROM (
 				%s
 			) c`, revSQL, fmt.Sprintf(listSQLc, "")), paramCharacter, numbered),
-
-		//CountSQL: q(fmt.Sprintf(`
-		//	SELECT (%s), COUNT(c.theid)
-		//	FROM (
-		//		%s
-		//	) c`, revSQL, fmt.Sprintf(listSQL, "")), paramCharacter, numbered),
 
 		AfterSQLPrefix: q(fmt.Sprintf(`
 			SELECT %s
@@ -298,14 +285,6 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 				ORDER BY kv.id ASC
 			`, columns), paramCharacter, numbered),
 		
-		//AfterSQL: q(fmt.Sprintf(`
-		//	SELECT (%s), (%s), %s
-		//	FROM kine kv
-		//	WHERE
-		//		kv.name LIKE ? AND
-		//		kv.id > ?
-		//	ORDER BY kv.id ASC`, revSQL, compactRevSQL, columns), paramCharacter, numbered),
-
 		DeleteSQL: q(`
 			DELETE FROM kine AS kv
 			WHERE kv.id = ?`, paramCharacter, numbered),
@@ -378,17 +357,19 @@ func (d* Generic) Prepare() error {
 		return err
 	}
 
+	// only needed for upstream version - can remove
 	//d.compactSQLPrepared, err = d.DB.Prepare(d.CompactSQL)
 	//if err != nil {
 	//	return err
 	//}
 
-	//d.updateCompactSQLPrepared, err = d.DB.Prepare(d.UpdateCompactSQL)
-	//if err != nil {
-	//	return err
-	//}
+	// could not test with just running k8s-dqlite - may need unit test
+	d.updateCompactSQLPrepared, err = d.DB.Prepare(d.UpdateCompactSQL)
+	if err != nil {
+		return err
+	}
 
-	// todo: DB Prepare() seems to complain about query syntax near "RETURNING"	
+	// FIXME: DB Prepare() seems to complain about query syntax near "RETURNING"	
 	//d.insertSQLPrepared, err = d.DB.Prepare(d.InsertSQL)
 	//if err != nil {
 	//	return err
@@ -423,30 +404,6 @@ func (d *Generic) query(ctx context.Context, sql string, args ...interface{})(ro
 	return d.DB.QueryContext(ctx, sql, args...)
 }
 
-// todo: this method is very different in latest Kine - revise. 
-//func (d *Generic) query(ctx context.Context, sql string, args ...interface{}) (rows *sql.Rows, err error) {
-//	i := uint(0)
-//	defer func() {
-//		if err != nil {
-//			err = fmt.Errorf("query (try: %d): %w", i, err)
-//		}
-//	}()
-//	for ; i < 500; i++ {
-//		if i > 2 {
-//			logrus.Debugf("QUERY (try: %d) %v : %s", i, args, Stripped(sql))
-//		} else {
-//			logrus.Tracef("QUERY (try: %d) %v : %s", i, args, Stripped(sql))
-//		}
-//		rows, err = d.DB.QueryContext(ctx, sql, args...)
-//		if err != nil && d.Retry != nil && d.Retry(err) {
-//			time.Sleep(jitter.Deviation(nil, 0.3)(2 * time.Millisecond))
-//			continue
-//		}
-//		return rows, err
-//	}
-//	return
-//}
-
 func (d* Generic) queryRow(ctx context.Context, sql string, args ...interface{})(result *sql.Row) {
 	logrus.Tracef("QUERY ROW %v : %s", args, util.Stripped(sql))
 	return d.DB.QueryRowContext(ctx, sql, args...)	
@@ -457,7 +414,7 @@ func (d* Generic) queryRowPrepared(ctx context.Context, sql string, prepared *sq
 	return prepared.QueryRowContext(ctx, args...)
 }
 
-// todo: this method outdated in latest Kind
+// todo: this method is outdated in latest Kind, but used for compaction
 func (d *Generic) queryInt64(ctx context.Context, sql string, args ...interface{}) (n int64, err error) {
 	i := uint(0)
 	defer func() {
@@ -560,23 +517,15 @@ func (d *Generic) GetCompactRevision(ctx context.Context) (int64, error) {
 	return id, err
 }
 
+// Could not test with just running k8sdqlite - may need unit tests
 func (d *Generic) SetCompactRevision(ctx context.Context, revision int64) error {
-	_, err := d.execute(ctx, d.UpdateCompactSQL, revision)
+	_, err := d.executePrepared(ctx, d.UpdateCompactSQL, d.updateCompactSQLPrepared, revision)
 	return err
 }
-
-//func (d *Generic) GetRevision(ctx context.Context, revision int64) (*sql.Rows, error) {
-//	return d.query(ctx, d.GetRevisionSQL, revision)
-//}
 
 func (d* Generic) GetRevision(ctx context.Context, revision int64)(*sql.Rows, error) {
 	return d.queryPrepared(ctx, d.GetRevisionSQL, d.getRevisionSQLPrepared, revision)
 }
-
-//func (d *Generic) DeleteRevision(ctx context.Context, revision int64) error {
-//	_, err := d.execute(ctx, d.DeleteSQL, revision)
-//	return err
-//}
 
 func (d *Generic) DeleteRevision(ctx context.Context, revision int64) error {
 	logrus.Tracef("DELETEREVISION %v", revision)	
@@ -605,22 +554,6 @@ func (d *Generic) ListCurrent(ctx context.Context, prefix string, limit int64, i
 //	return d.query(ctx, sql, start, end, includeDeleted)
 //}
 
-//func (d *Generic) List(ctx context.Context, prefix, startKey string, limit, revision int64, includeDeleted bool) (*sql.Rows, error) {
-//	if startKey == "" {
-//		sql := d.ListRevisionStartSQL
-//		if limit > 0 {
-//			sql = fmt.Sprintf("%s LIMIT %d", sql, limit)
-//		}
-//		return d.query(ctx, sql, prefix, revision, includeDeleted)
-//	}
-//
-//	sql := d.GetRevisionAfterSQL
-//	if limit > 0 {
-//		sql = fmt.Sprintf("%s LIMIT %d", sql, limit)
-//	}
-//	return d.query(ctx, sql, prefix, revision, startKey, revision, includeDeleted)
-//}
-
 func (d *Generic) List(ctx context.Context, prefix, startKey string, limit, revision int64, includeDeleted bool) (*sql.Rows, error) {
 	start, end := getPrefixRange(prefix)
 
@@ -641,35 +574,6 @@ func (d *Generic) List(ctx context.Context, prefix, startKey string, limit, revi
 	return d.query(ctx, sql, start, end, revision, startKey, revision, includeDeleted)
 }
 
-
-//func (d *Generic) Count(ctx context.Context, prefix string) (int64, int64, error) {
-//	var (
-//		rev sql.NullInt64
-//		id  int64
-//		err error
-//		i   uint
-//	)
-//
-//	for ; i < 500; i++ {
-//		if i > 0 {
-//			logrus.Debugf("COUNT (try: %d) : %s", i, prefix)
-//		} else {
-//			logrus.Tracef("COUNT (try: %d) : %s", i, prefix)
-//		}
-//		row := d.DB.QueryRowContext(ctx, d.CountSQL, prefix, false)
-//		err = row.Scan(&rev, &id)
-//		if err != nil && d.Retry != nil && d.Retry(err) {
-//			time.Sleep(jitter.Deviation(nil, 0.3)(2 * time.Millisecond))
-//			continue
-//		}
-//		break
-//	}
-//	if err != nil {
-//		err = fmt.Errorf("count %s (try: %d): %w", prefix, i, err)
-//	}
-//	return rev.Int64, id, err
-//}
-
 func (d *Generic) Count(ctx context.Context, prefix string) (int64, int64, error) {
 	var (
 		rev sql.NullInt64
@@ -681,14 +585,6 @@ func (d *Generic) Count(ctx context.Context, prefix string) (int64, int64, error
 	err := row.Scan(&rev, &id)
 	return rev.Int64, id, err
 }
-
-//func (d *Generic) CurrentRevision(ctx context.Context) (int64, error) {
-//	id, err := d.queryInt64(ctx, revSQL)
-//	if err == sql.ErrNoRows {
-//		return 0, nil
-//	}
-//	return id, err
-//}
 
 func (d *Generic) CurrentRevision(ctx context.Context) (int64, error) {
 	var id int64
@@ -709,14 +605,6 @@ func (d *Generic) AfterPrefix(ctx context.Context, prefix string, rev, limit int
 	return d.query(ctx, sql, start, end, rev)
 }
 
-//func (d *Generic) After(ctx context.Context, prefix string, rev, limit int64) (*sql.Rows, error) {
-//	sql := d.AfterSQL
-//	if limit > 0 {
-//		sql = fmt.Sprintf("%s LIMIT %d", sql, limit)
-//	}
-//	return d.query(ctx, sql, prefix, rev)
-//}
-
 func (d *Generic) After(ctx context.Context, rev, limit int64) (*sql.Rows, error) {
 	sql := d.AfterSQL
 	if limit > 0 {
@@ -724,12 +612,6 @@ func (d *Generic) After(ctx context.Context, rev, limit int64) (*sql.Rows, error
 	}
 	return d.query(ctx, sql, rev)
 }
-
-
-//func (d *Generic) Fill(ctx context.Context, revision int64) error {
-//	_, err := d.execute(ctx, d.FillSQL, revision, fmt.Sprintf("gap-%d", revision), 0, 1, 0, 0, 0, nil, nil)
-//	return err
-//}
 
 func (d *Generic) Fill(ctx context.Context, revision int64) error {
 	_, err := d.executePrepared(ctx, d.FillSQL, d.fillSQLPrepared, revision, fmt.Sprintf("gap-%d", revision), 0, 1, 0, 0, 0, nil, nil)
@@ -759,8 +641,8 @@ func (d *Generic) Insert(ctx context.Context, key string, create, delete bool, c
 	}
 
 	if d.LastInsertID {
-		row, err := d.execute(ctx, d.InsertLastInsertIDSQL, key, cVal, dVal, createRevision, previousRevision, ttl, value, prevValue)
-		//row, err := d.executePrepared(ctx, d.InsertLastInsertIDSQL, d.insertLastInsertIDSQLPrepared, key, cVal, dVal, createRevision, previousRevision, ttl, value, prevValue)
+		//row, err := d.execute(ctx, d.InsertLastInsertIDSQL, key, cVal, dVal, createRevision, previousRevision, ttl, value, prevValue)
+		row, err := d.executePrepared(ctx, d.InsertLastInsertIDSQL, d.insertLastInsertIDSQLPrepared, key, cVal, dVal, createRevision, previousRevision, ttl, value, prevValue)
 	
 		if err != nil {
 			return 0, err
@@ -769,6 +651,7 @@ func (d *Generic) Insert(ctx context.Context, key string, create, delete bool, c
 	}
 
 	id, err = d.queryInt64(ctx, d.InsertSQL, key, cVal, dVal, createRevision, previousRevision, ttl, value, prevValue)
+	// FIXME: should use this one instead, but bug in insertSQLPrepared preparation prevents it!
 	//row := d.queryRowPrepared(ctx, d.InsertSQL, d.insertSQLPrepared, key, cVal, dVal, createRevision, previousRevision, ttl, value, prevValue)
 	//err = row.Scan(&id)
 	return id, err
@@ -792,13 +675,6 @@ func (d *Generic) GetSize(ctx context.Context)(int64, error){
 	
 	return size, nil
 }
-
-//func (d *Generic) GetSize(ctx context.Context) (int64, error) {
-//	if d.GetSizeSQL == "" {
-//		return 0, errors.New("driver does not support size reporting")
-//	}
-//	return d.queryInt64(ctx, d.GetSizeSQL)
-//}
 
 func (d *Generic) GetCompactInterval() time.Duration {
 	if v := d.CompactInterval; v > 0 {

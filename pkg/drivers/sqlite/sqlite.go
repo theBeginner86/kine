@@ -67,6 +67,8 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 		return err
 	}
 	dialect.GetSizeSQL = `SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()`
+	
+	// Added but not used in our version - requires porting upstream compaction
 	dialect.CompactSQL = `
 		DELETE FROM kine AS kv
 		WHERE
@@ -112,9 +114,6 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "setup db")
 	}
-	//if err := setup(dialect.DB); err != nil {
-	//	return nil, nil, errors.Wrap(err, "setup db")
-	//}
 
 	dialect.Migrate(context.Background())
 	if err := dialect.Prepare(); err != nil {
