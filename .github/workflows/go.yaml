@@ -1,0 +1,72 @@
+name: Go
+
+on:
+  pull_request:
+
+jobs:
+  code-quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2.4.0
+
+      - name: Install Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: "1.19"
+
+      - name: go mod download
+        run: go mod download
+
+      - name: go fmt
+        run: make go.fmt
+
+      - name: check diff
+        run: |
+          if ! git diff; then
+            echo "Detected changes that have not been committed to the repository"
+            exit 1
+          fi
+
+      - name: go vet
+        run: make go.vet
+
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out Code
+        uses: actions/checkout@v2.4.0
+
+      - name: Install Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: "1.19"
+
+      - name: go mod download
+        run: go mod download
+
+      - name: Run tests
+        run: make go.test
+
+  benchmarks:
+    name: Benchmarks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out Code
+        uses: actions/checkout@v2.4.0
+
+      - name: Install Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: "1.19"
+
+      - name: go mod download
+        run: go mod download
+
+      - name: Run benchmarks
+        run: make go.bench
