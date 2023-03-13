@@ -63,7 +63,7 @@ func BenchmarkGet(b *testing.B) {
 
 	b.Run("LatestRevision", func(b *testing.B) {
 		g := NewWithT(b)
-		for i := 0; i < 50*b.N; i++ {
+		for i := 0; i < b.N; i++ {
 			resp, err := client.Get(ctx, "testKey", clientv3.WithRange(""))
 			g.Expect(err).To(BeNil())
 			g.Expect(resp.Kvs).To(HaveLen(1))

@@ -43,7 +43,7 @@ func BenchmarkCreate(b *testing.B) {
 	client := newKine(b)
 
 	g := NewWithT(b)
-	for i := 0; i < 50*b.N; i++ {
+	for i := 0; i < b.N; i++ {
 		key := fmt.Sprintf("key-%d", i)
 		value := fmt.Sprintf("value-%d", i)
 		resp, err := client.Txn(ctx).
