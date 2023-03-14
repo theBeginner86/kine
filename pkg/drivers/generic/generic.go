@@ -38,15 +38,13 @@ var (
 			DESC LIMIT 1
 		) AS high`
 
-	// Needed by GetCompactRevision() and ListSQL
 	compactRevSQL = `
 		SELECT crkv.prev_revision
 		FROM kine crkv
 		WHERE crkv.name = 'compact_rev_key'
 		ORDER BY crkv.id DESC LIMIT 1`
 
-	// todo: remove after fixing ListCurrent()
-	listSQL = fmt.Sprintf(`SELECT (%s), (%s), %s
+	listCurrentSQL = fmt.Sprintf(`SELECT (%s), (%s), %s
 		FROM kine kv
 		JOIN (
 			SELECT MAX(mkv.id) as id
@@ -61,8 +59,7 @@ var (
 		ORDER BY kv.id ASC
 		`, revSQL, compactRevSQL, columns)
 
-	// newer version of listSQL, now used by ListRevisionSQL and CountSQL 
-	listSQLc = fmt.Sprintf(`
+	listSQL = fmt.Sprintf(`
 		SELECT %s
 		FROM kine as kv
 			LEFT JOIN kine kv2
@@ -259,8 +256,8 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 			FROM kine AS kv
 			WHERE kv.id = ?`, columns), paramCharacter, numbered),
 
-		GetCurrentSQL:        q(fmt.Sprintf(listSQL, ""), paramCharacter, numbered),
-		ListRevisionStartSQL: q(fmt.Sprintf(listSQLc, "AND kv.id <= ?"), paramCharacter, numbered),
+		GetCurrentSQL:        q(fmt.Sprintf(listCurrentSQL, ""), paramCharacter, numbered),
+		ListRevisionStartSQL: q(fmt.Sprintf(listSQL, "AND kv.id <= ?"), paramCharacter, numbered),
 		
 		GetRevisionAfterSQL:  q(revisionAfterSQL, paramCharacter, numbered),
 
@@ -268,7 +265,7 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 			SELECT (%s), COUNT(*)
 			FROM (
 				%s
-			) c`, revSQL, fmt.Sprintf(listSQLc, "")), paramCharacter, numbered),
+			) c`, revSQL, fmt.Sprintf(listSQL, "")), paramCharacter, numbered),
 
 		AfterSQLPrefix: q(fmt.Sprintf(`
 			SELECT %s
@@ -498,24 +495,24 @@ func (d *Generic) executePrepared(ctx context.Context, sql string, prepared *sql
 }
 
 // todo: figure out why this one doesn't work
-//func (d* Generic) GetCompactRevision(ctx context.Context)(int64, int64, error) {
-//	var compact, target sql.NullInt64
-//	row := d.queryRow(ctx, revisionIntervalSQL)
-//	err := row.Scan(&compact, &target)
-//	if err == sql.ErrNoRows {
-//		return 0, 0, nil
-//	}
-//	
-//	return compact.Int64, target.Int64, err
-//}
-
-func (d *Generic) GetCompactRevision(ctx context.Context) (int64, error) {
-	id, err := d.queryInt64(ctx, compactRevSQL)
+func (d* Generic) GetCompactRevision(ctx context.Context)(int64, int64, error) {
+	var compact, target sql.NullInt64
+	row := d.queryRow(ctx, revisionIntervalSQL)
+	err := row.Scan(&compact, &target)
 	if err == sql.ErrNoRows {
-		return 0, nil
+		return 0, 0, nil
 	}
-	return id, err
+	
+	return compact.Int64, target.Int64, err
 }
+
+//func (d *Generic) GetCompactRevision(ctx context.Context) (int64, error) {
+//	id, err := d.queryInt64(ctx, compactRevSQL)
+//	if err == sql.ErrNoRows {
+//		return 0, nil
+//	}
+//	return id, err
+//}
 
 // Could not test with just running k8sdqlite - may need unit tests
 func (d *Generic) SetCompactRevision(ctx context.Context, revision int64) error {
@@ -641,19 +638,18 @@ func (d *Generic) Insert(ctx context.Context, key string, create, delete bool, c
 	}
 
 	if d.LastInsertID {
-		//row, err := d.execute(ctx, d.InsertLastInsertIDSQL, key, cVal, dVal, createRevision, previousRevision, ttl, value, prevValue)
 		row, err := d.executePrepared(ctx, d.InsertLastInsertIDSQL, d.insertLastInsertIDSQLPrepared, key, cVal, dVal, createRevision, previousRevision, ttl, value, prevValue)
-	
+		//row, err := d.execute(ctx, d.InsertLastInsertIDSQL, key, cVal, dVal, createRevision, previousRevision, ttl, value, prevValue)
 		if err != nil {
 			return 0, err
 		}
 		return row.LastInsertId()
 	}
 
+	// For DBs that use RETURNING as a keyword instead of implementing LastInsertId.  
+	// We don't prepare the statement though, as the version of sqlite doesn't suppory this keyword.
 	id, err = d.queryInt64(ctx, d.InsertSQL, key, cVal, dVal, createRevision, previousRevision, ttl, value, prevValue)
-	// FIXME: should use this one instead, but bug in insertSQLPrepared preparation prevents it!
-	//row := d.queryRowPrepared(ctx, d.InsertSQL, d.insertSQLPrepared, key, cVal, dVal, createRevision, previousRevision, ttl, value, prevValue)
-	//err = row.Scan(&id)
+
 	return id, err
 }
 
