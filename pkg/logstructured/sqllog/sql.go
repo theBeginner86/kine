@@ -350,7 +350,6 @@ func (s *SQLLog) startWatch() (chan interface{}, error) {
 	return c, nil
 }
 
-// todo: may need to modify this method to match upstream
 func (s *SQLLog) poll(result chan interface{}, pollStart int64) {
 	var (
 		last        = pollStart
