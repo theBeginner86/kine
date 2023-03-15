@@ -12,6 +12,15 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
+var (
+	// testWatchEventPollTimeout is the timeout for waiting to receive an event.
+	testWatchEventPollTimeout = 50 * time.Millisecond
+
+	// testWatchEventIdleTimeout is the amount of time to wait to ensure that no events
+	// are received when they should not.
+	testWatchEventIdleTimeout = 100 * time.Millisecond
+)
+
 // newKine spins up a new instance of kine. it also registers cleanup functions for temporary data
 //
 // newKine is currently hardcoded to using sqlite and a unix socket listener, but might be extended in the future

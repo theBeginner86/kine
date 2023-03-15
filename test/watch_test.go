@@ -28,7 +28,7 @@ func TestWatch(t *testing.T) {
 
 	t.Run("ReceiveNothingUntilActivity", func(t *testing.T) {
 		g := NewWithT(t)
-		g.Consistently(watchCh, "100ms").ShouldNot(Receive())
+		g.Consistently(watchCh, testWatchEventIdleTimeout).ShouldNot(Receive())
 	})
 
 	t.Run("Create", func(t *testing.T) {
@@ -48,7 +48,7 @@ func TestWatch(t *testing.T) {
 		// receive event
 		t.Run("Receive", func(t *testing.T) {
 			g := NewWithT(t)
-			g.Eventually(watchCh, "50ms").Should(Receive(Satisfy(func(v clientv3.WatchResponse) bool {
+			g.Eventually(watchCh, testWatchEventPollTimeout).Should(Receive(Satisfy(func(v clientv3.WatchResponse) bool {
 				g.Expect(v.Events).To(HaveLen(1))
 				g.Expect(v.Events[0].Type).To(Equal(clientv3.EventTypePut))
 				g.Expect(v.Events[0].PrevKv).To(BeNil())
@@ -64,7 +64,7 @@ func TestWatch(t *testing.T) {
 
 		t.Run("ReceiveNothingUntilNewActivity", func(t *testing.T) {
 			g := NewWithT(t)
-			g.Consistently(watchCh, "100ms").ShouldNot(Receive())
+			g.Consistently(watchCh, testWatchEventIdleTimeout).ShouldNot(Receive())
 		})
 	})
 
@@ -87,7 +87,7 @@ func TestWatch(t *testing.T) {
 			g := NewWithT(t)
 
 			// receive event
-			g.Eventually(watchCh, "50ms").Should(Receive(Satisfy(func(v clientv3.WatchResponse) bool {
+			g.Eventually(watchCh, testWatchEventPollTimeout).Should(Receive(Satisfy(func(v clientv3.WatchResponse) bool {
 				g.Expect(v.Events).To(HaveLen(1))
 				g.Expect(v.Events[0].Type).To(Equal(clientv3.EventTypePut))
 				g.Expect(v.Events[0].PrevKv).NotTo(BeNil())
@@ -107,7 +107,7 @@ func TestWatch(t *testing.T) {
 
 		t.Run("ReceiveNothingUntilNewActivity", func(t *testing.T) {
 			g := NewWithT(t)
-			g.Consistently(watchCh, "100ms").ShouldNot(Receive())
+			g.Consistently(watchCh, testWatchEventIdleTimeout).ShouldNot(Receive())
 		})
 	})
 
@@ -130,7 +130,7 @@ func TestWatch(t *testing.T) {
 			g := NewWithT(t)
 
 			// receive event
-			g.Eventually(watchCh, "50ms").Should(Receive(Satisfy(func(v clientv3.WatchResponse) bool {
+			g.Eventually(watchCh, testWatchEventPollTimeout).Should(Receive(Satisfy(func(v clientv3.WatchResponse) bool {
 				g.Expect(v.Events).To(HaveLen(1))
 				g.Expect(v.Events[0].Type).To(Equal(clientv3.EventTypeDelete))
 				g.Expect(v.Events[0].PrevKv).NotTo(BeNil())
@@ -151,7 +151,7 @@ func TestWatch(t *testing.T) {
 
 		t.Run("ReceiveNothingUntilNewActivity", func(t *testing.T) {
 			g := NewWithT(t)
-			g.Consistently(watchCh, "100ms").ShouldNot(Receive())
+			g.Consistently(watchCh, testWatchEventIdleTimeout).ShouldNot(Receive())
 		})
 	})
 
@@ -161,7 +161,7 @@ func TestWatch(t *testing.T) {
 		t.Run("Receive", func(t *testing.T) {
 			g := NewWithT(t)
 
-			g.Eventually(watchAfterDeleteCh, "50ms").Should(Receive(Satisfy(func(v clientv3.WatchResponse) bool {
+			g.Eventually(watchAfterDeleteCh, testWatchEventPollTimeout).Should(Receive(Satisfy(func(v clientv3.WatchResponse) bool {
 				// receive 2 events
 				g.Expect(v.Events).To(HaveLen(2))
 
@@ -194,7 +194,7 @@ func TestWatch(t *testing.T) {
 
 		t.Run("OtherWatcherIdle", func(t *testing.T) {
 			g := NewWithT(t)
-			g.Consistently(watchCh, "100ms").ShouldNot(Receive())
+			g.Consistently(watchCh, testWatchEventIdleTimeout).ShouldNot(Receive())
 		})
 	})
 }
