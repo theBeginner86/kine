@@ -2,6 +2,7 @@ package test
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -13,11 +14,29 @@ func TestGet(t *testing.T) {
 	ctx := context.Background()
 	client := newKine(t)
 
-	t.Run("FailMissing", func(t *testing.T) {
+	t.Run("FailNotFound", func(t *testing.T) {
 		g := NewWithT(t)
-		resp, err := client.Get(ctx, "testKey", clientv3.WithRange(""))
 
+		// Get non-existent key
+		resp, err := client.Get(ctx, "nonExistentKey", clientv3.WithRange(""))
 		g.Expect(err).To(BeNil())
+		g.Expect(resp.Kvs).To(BeEmpty())
+	})
+
+	t.Run("FailEmptyKey", func(t *testing.T) {
+		g := NewWithT(t)
+
+		// Get empty key
+		_, err := client.Get(ctx, "", clientv3.WithRange(""))
+		g.Expect(err).ToNot(BeNil())
+	})
+
+	t.Run("FailRange", func(t *testing.T) {
+		g := NewWithT(t)
+
+		// Get range with a non-existing key
+		resp, err := client.Get(ctx, "testKey", clientv3.WithRange("thisIsNotAKey"))
+		g.Expect(err).To(HaveOccurred())
 		g.Expect(resp.Kvs).To(BeEmpty())
 	})
 
@@ -41,6 +60,150 @@ func TestGet(t *testing.T) {
 			g.Expect(resp.Kvs).To(HaveLen(1))
 			g.Expect(resp.Kvs[0].Key).To(Equal([]byte("testKey")))
 			g.Expect(resp.Kvs[0].Value).To(Equal([]byte("testValue")))
+		}
+	})
+
+	t.Run("KeyRevision", func(t *testing.T) {
+		g := NewWithT(t)
+
+		var lastModRev int64
+
+		// Create a key with a known value
+		{
+			resp, err := client.Txn(ctx).
+				If(clientv3.Compare(clientv3.ModRevision("testKey"), "=", 0)).
+				Then(clientv3.OpPut("testKey", "testValue")).
+				Commit()
+			g.Expect(err).To(BeNil())
+			g.Expect(resp.Succeeded).To(BeTrue())
+			lastModRev = resp.Responses[0].GetResponsePut().Header.Revision
+		}
+
+		// Get the key's version
+		{
+			resp, err := client.Get(ctx, "testKey", clientv3.WithCountOnly())
+			g.Expect(err).To(BeNil())
+			g.Expect(resp.Count).To(Equal(int64(1)))
+		}
+
+		// Update the key
+		{
+			resp, err := client.Txn(ctx).
+				If(clientv3.Compare(clientv3.ModRevision("testKey"), "=", lastModRev)).
+				Then(clientv3.OpPut("testKey", "testValue2")).
+				Else(clientv3.OpGet("testKey", clientv3.WithRange(""))).
+				Commit()
+			g.Expect(err).To(BeNil())
+			g.Expect(resp.Header.Revision).To(Equal(int64(2)))
+		}
+
+		// Get the updated key's version
+		{
+			resp, err := client.Get(ctx, "testKey", clientv3.WithCountOnly())
+			g.Expect(err).To(BeNil())
+			g.Expect(resp.Count).To(Equal(int64(1)))
+		}
+	})
+
+	t.Run("ConcurrentAccess", func(t *testing.T) {
+		g := NewWithT(t)
+
+		var lastModRev int64
+
+		// Create a key with a known value
+		{
+			resp, err := client.Txn(ctx).
+				If(clientv3.Compare(clientv3.ModRevision("testKey"), "=", 0)).
+				Then(clientv3.OpPut("testKey", "testValue")).
+				Commit()
+			g.Expect(err).To(BeNil())
+			g.Expect(resp.Succeeded).To(BeTrue())
+			lastModRev = resp.Responses[0].GetResponsePut().Header.Revision
+		}
+
+		// Concurrently update the key
+		var wg sync.WaitGroup
+		for i := 0; i < 10; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				_, err := client.Txn(ctx).
+					If(clientv3.Compare(clientv3.ModRevision("testKey"), "=", lastModRev)).
+					Then(clientv3.OpPut("testKey", "newValue")).
+					Commit()
+				g.Expect(err).To(BeNil())
+			}()
+		}
+		wg.Wait()
+
+		// Get the key and verify its value
+		{
+			resp, err := client.Get(ctx, "testKey", clientv3.WithRange(""))
+			g.Expect(err).To(BeNil())
+			g.Expect(resp.Kvs).To(HaveLen(1))
+			g.Expect(resp.Kvs[0].Key).To(Equal([]byte("testKey")))
+			g.Expect(resp.Kvs[0].Value).To(Equal([]byte("newValue")))
+			g.Expect(resp.Kvs[0].ModRevision).To(Equal(int64(resp.Kvs[0].CreateRevision)))
+		}
+	})
+
+	t.Run("SuccessWithPrefix", func(t *testing.T) {
+		g := NewWithT(t)
+
+		// Create keys with prefix
+		{
+			resp, err := client.Txn(ctx).
+				If(clientv3.Compare(clientv3.ModRevision("prefix/testKey1"), "=", 0)).
+				Then(clientv3.OpPut("prefix/testKey1", "testValue1")).
+				Commit()
+
+			g.Expect(err).To(BeNil())
+			g.Expect(resp.Succeeded).To(BeTrue())
+
+			resp, err = client.Txn(ctx).
+				If(clientv3.Compare(clientv3.ModRevision("prefix/testKey2"), "=", 0)).
+				Then(clientv3.OpPut("prefix/testKey2", "testValue2")).
+				Commit()
+
+			g.Expect(err).To(BeNil())
+			g.Expect(resp.Succeeded).To(BeTrue())
+		}
+
+		// Get keys with prefix
+		{
+			resp, err := client.Get(ctx, "prefix", clientv3.WithPrefix())
+			g.Expect(err).To(BeNil())
+			g.Expect(resp.Kvs).To(HaveLen(2))
+
+			var keys []string
+			for _, kv := range resp.Kvs {
+				keys = append(keys, string(kv.Key))
+			}
+
+			g.Expect(keys).To(ContainElements("prefix/testKey1", "prefix/testKey2"))
+		}
+	})
+
+	t.Run("FailNotFound", func(t *testing.T) {
+		g := NewWithT(t)
+
+		// Delete key
+		{
+			resp, err := client.Txn(ctx).
+				If(clientv3.Compare(clientv3.ModRevision("testKey"), "=", 0)).
+				Then(clientv3.OpDelete("testKey")).
+				Else(clientv3.OpGet("testKey")).
+				Commit()
+
+			g.Expect(err).To(BeNil())
+			g.Expect(resp.Succeeded).To(BeTrue())
+		}
+
+		// Get key
+		{
+			resp, err := client.Get(ctx, "testKey", clientv3.WithRange(""))
+			g.Expect(err).To(BeNil())
+			g.Expect(resp.Kvs).To(BeEmpty())
 		}
 	})
 }
