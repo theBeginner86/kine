@@ -14,6 +14,7 @@ func TestDelete(t *testing.T) {
 	ctx := context.Background()
 	client := newKine(t)
 
+	// Calling the delete method outside a transaction should fail in kine
 	t.Run("DeleteNotSupportedFails", func(t *testing.T) {
 		g := NewWithT(t)
 		resp, err := client.Delete(ctx, "missingKey")
@@ -23,57 +24,26 @@ func TestDelete(t *testing.T) {
 		g.Expect(resp).To(BeNil())
 	})
 
+	// Delete a key that does not exist
 	t.Run("DeleteNonExistentKeys", func(t *testing.T) {
 		g := NewWithT(t)
-		// The Get before the Delete is to trick kine to accept the transaction
-		resp, err := client.Txn(ctx).
-			Then(clientv3.OpGet("alsoNonExistentKey"), clientv3.OpDelete("alsoNonExistentKey")).
-			Commit()
-
-		g.Expect(err).To(BeNil())
-		g.Expect(resp.Succeeded).To(BeTrue())
+		deleteKey(ctx, g, client, "alsoNonExistentKey")
 	})
 
-	// Add a key, make sure it exists, then delete it, make sure it got deleted
+	// Add a key, make sure it exists, then delete it, make sure it got deleted,
+	// recreate it, make sure it exists again.
 	t.Run("DeleteSuccess", func(t *testing.T) {
 		g := NewWithT(t)
 
-		{
-			resp, err := client.Txn(ctx).
-				If(clientv3.Compare(clientv3.ModRevision("testKeyToDelete"), "=", 0)).
-				Then(clientv3.OpPut("testKeyToDelete", "testValue")).
-				Commit()
+		key := "testKeyToDelete"
+		value := "testValue"
 
-			g.Expect(err).To(BeNil())
-			g.Expect(resp.Succeeded).To(BeTrue())
-		}
-
-		{
-			resp, err := client.Get(ctx, "testKeyToDelete")
-
-			g.Expect(err).To(BeNil())
-			g.Expect(resp.Kvs).To(HaveLen(1))
-			g.Expect(resp.Kvs[0].Key).To(Equal([]byte("testKeyToDelete")))
-			g.Expect(resp.Kvs[0].Value).To(Equal([]byte("testValue")))
-		}
-
-		{
-			// The Get before the Delete is to trick kine to accept the transaction
-			resp, err := client.Txn(ctx).
-				Then(clientv3.OpGet("testKeyToDelete"), clientv3.OpDelete("testKeyToDelete")).
-				Commit()
-
-			g.Expect(err).To(BeNil())
-			g.Expect(resp.Succeeded).To(BeTrue())
-		}
-
-		{
-			resp, err := client.Get(ctx, "testKeyToDelete")
-
-			g.Expect(err).To(BeNil())
-			g.Expect(resp.Kvs).To(HaveLen(0))
-		}
-
+		createKey(ctx, g, client, key, value)
+		assertKey(ctx, g, client, key, value)
+		deleteKey(ctx, g, client, key)
+		assertMissingKey(ctx, g, client, key)
+		createKey(ctx, g, client, key, value)
+		assertKey(ctx, g, client, key, value)
 	})
 }
 
@@ -86,23 +56,47 @@ func BenchmarkDelete(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		key := fmt.Sprintf("key-%d", i)
 		value := fmt.Sprintf("value-%d", i)
-		resp, err := client.Txn(ctx).
-			If(clientv3.Compare(clientv3.ModRevision(key), "=", 0)).
-			Then(clientv3.OpPut(key, value)).
-			Commit()
-
-		g.Expect(err).To(BeNil())
-		g.Expect(resp.Succeeded).To(BeTrue())
+		createKey(ctx, g, client, key, value)
 	}
 
 	for i := 0; i < b.N; i++ {
 		key := fmt.Sprintf("key-%d", i)
-		resp, err := client.Txn(ctx).
-			Then(clientv3.OpGet(key), clientv3.OpDelete(key)).
-			Commit()
-
-		g.Expect(err).To(BeNil())
-		g.Expect(resp.Succeeded).To(BeTrue())
+		deleteKey(ctx, g, client, key)
 	}
+}
 
+func assertMissingKey(ctx context.Context, g Gomega, client *clientv3.Client, key string) {
+	resp, err := client.Get(ctx, key)
+
+	g.Expect(err).To(BeNil())
+	g.Expect(resp.Kvs).To(HaveLen(0))
+}
+
+func deleteKey(ctx context.Context, g Gomega, client *clientv3.Client, key string) {
+	// The Get before the Delete is to trick kine to accept the transaction
+	resp, err := client.Txn(ctx).
+		Then(clientv3.OpGet(key), clientv3.OpDelete(key)).
+		Commit()
+
+	g.Expect(err).To(BeNil())
+	g.Expect(resp.Succeeded).To(BeTrue())
+}
+
+func assertKey(ctx context.Context, g Gomega, client *clientv3.Client, key string, value string) {
+	resp, err := client.Get(ctx, key)
+
+	g.Expect(err).To(BeNil())
+	g.Expect(resp.Kvs).To(HaveLen(1))
+	g.Expect(resp.Kvs[0].Key).To(Equal([]byte(key)))
+	g.Expect(resp.Kvs[0].Value).To(Equal([]byte(value)))
+}
+
+func createKey(ctx context.Context, g Gomega, client *clientv3.Client, key string, value string) {
+	resp, err := client.Txn(ctx).
+		If(clientv3.Compare(clientv3.ModRevision(key), "=", 0)).
+		Then(clientv3.OpPut(key, value)).
+		Commit()
+
+	g.Expect(err).To(BeNil())
+	g.Expect(resp.Succeeded).To(BeTrue())
 }
