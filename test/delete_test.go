@@ -37,7 +37,6 @@ func TestDelete(t *testing.T) {
 
 		key := "testKeyToDelete"
 		value := "testValue"
-
 		createKey(ctx, g, client, key, value)
 		assertKey(ctx, g, client, key, value)
 		deleteKey(ctx, g, client, key)
