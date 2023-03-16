@@ -132,17 +132,10 @@ func TestGet(t *testing.T) {
 		// Get keys with prefix
 		{
 			resp, err := client.Get(ctx, "prefix", clientv3.WithPrefix())
-			g.Expect(resp.Kvs[0].Key).To(Equal([]byte("prefix/testKey1")))
-			g.Expect(resp.Kvs[1].Key).To(Equal([]byte("prefix/testKey2")))
-
-			var keys []string
-			for _, kv := range resp.Kvs {
-				keys = append(keys, string(kv.Key))
-			}
 
 			g.Expect(err).To(BeNil())
-			g.Expect(resp.Kvs).To(HaveLen(2))
-			g.Expect(keys).To(ContainElements("prefix/testKey1", "prefix/testKey2"))
+			g.Expect(resp.Kvs[0].Key).To(Equal([]byte("prefix/testKey1")))
+			g.Expect(resp.Kvs[1].Key).To(Equal([]byte("prefix/testKey2")))
 		}
 	})
 
