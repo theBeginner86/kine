@@ -37,12 +37,12 @@ var (
 				old_value BLOB
 			)`,
 		`CREATE INDEX IF NOT EXISTS kine_name_index ON kine (name, id)`,
-		`CREATE UNIQUE INDEX IF NOT EXISTS kine_name_prev_revision_uindex ON kine (name, prev_revision)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS kine_name_prev_revision_uindex ON kine (prev_revision, name)`,
 	}
 )
 
 func New(ctx context.Context, dataSourceName string) (server.Backend, error) {
-	backend, _, err := NewVariant(ctx, "sqlite3_wal_truncate", dataSourceName)
+	backend, _, err := NewVariant(ctx, "sqlite3", dataSourceName)
 	return backend, err
 }
 
@@ -51,7 +51,7 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 		if err := os.MkdirAll("./db", 0700); err != nil {
 			return nil, nil, err
 		}
-		dataSourceName = "./db/state.db?_timeout=30000&_txlock=immediate&_journal=WAL&cache=shared"
+		dataSourceName = "./db/state.db?_journal=WAL&cache=shared"
 	}
 
 	dialect, err := generic.Open(ctx, driverName, dataSourceName, "?", false)
@@ -67,7 +67,7 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 		return err
 	}
 	dialect.GetSizeSQL = `SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()`
-	
+
 	// Added but not used in our version - requires porting upstream compaction
 	dialect.CompactSQL = `
 		DELETE FROM kine AS kv
@@ -118,7 +118,7 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 	dialect.Migrate(context.Background())
 	if err := dialect.Prepare(); err != nil {
 		fmt.Println("Prepare() error", err)
-		
+
 		return nil, nil, err
 	}
 

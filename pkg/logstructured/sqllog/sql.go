@@ -13,7 +13,7 @@ import (
 
 // note: added acc to upstream
 const (
-	pollBatchSize	= 500	
+	pollBatchSize = 500
 )
 
 type SQLLog struct {
@@ -358,7 +358,7 @@ func (s *SQLLog) poll(result chan interface{}, pollStart int64) {
 		waitForMore = true
 	)
 
-	wait := time.NewTicker(time.Second)
+	wait := time.NewTicker(s.d.GetPollInterval())
 	defer wait.Stop()
 	defer close(result)
 
@@ -375,7 +375,7 @@ func (s *SQLLog) poll(result chan interface{}, pollStart int64) {
 			}
 		}
 		waitForMore = true
-	
+
 		rows, err := s.d.AfterPrefix(s.ctx, "%", last, pollBatchSize)
 		if err != nil {
 			logrus.Errorf("fail to list latest changes: %v", err)
