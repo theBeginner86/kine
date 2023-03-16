@@ -12,11 +12,10 @@ import (
 func TestGet(t *testing.T) {
 	ctx := context.Background()
 	client := newKine(t)
-	var key string
 
 	t.Run("FailNotFound", func(t *testing.T) {
 		g := NewWithT(t)
-		key = "testKeyFailNotFound"
+		key := "testKeyFailNotFound"
 
 		// Get non-existent key
 		resp, err := client.Get(ctx, key, clientv3.WithRange(""))
@@ -34,7 +33,7 @@ func TestGet(t *testing.T) {
 
 	t.Run("FailRange", func(t *testing.T) {
 		g := NewWithT(t)
-		key = "testKeyFailRange"
+		key := "testKeyFailRange"
 
 		// Get range with a non-existing key
 		resp, err := client.Get(ctx, key, clientv3.WithRange("thisIsNotAKey"))
@@ -44,7 +43,7 @@ func TestGet(t *testing.T) {
 
 	t.Run("Success", func(t *testing.T) {
 		g := NewWithT(t)
-		key = "testKeySuccess"
+		key := "testKeySuccess"
 
 		// Create a key
 		{
@@ -68,7 +67,7 @@ func TestGet(t *testing.T) {
 
 	t.Run("KeyRevision", func(t *testing.T) {
 		g := NewWithT(t)
-		key = "testKeyRevision"
+		key := "testKeyRevision"
 		var lastModRev int64
 
 		// Create a key with a known value
@@ -147,7 +146,7 @@ func TestGet(t *testing.T) {
 
 	t.Run("FailNotFound", func(t *testing.T) {
 		g := NewWithT(t)
-		key = "testKeyFailNotFound"
+		key := "testKeyFailNotFound"
 
 		// Delete key
 		{
