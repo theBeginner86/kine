@@ -137,6 +137,7 @@ func TestGet(t *testing.T) {
 			resp, err := client.Get(ctx, "prefix", clientv3.WithPrefix())
 
 			g.Expect(err).To(BeNil())
+			g.Expect(resp.Kvs).To(HaveLen(2))
 			g.Expect(resp.Kvs[0].Key).To(Equal([]byte("prefix/testKey1")))
 			g.Expect(resp.Kvs[1].Key).To(Equal([]byte("prefix/testKey2")))
 		}
