@@ -25,18 +25,18 @@ var (
 	schema = []string{
 		`CREATE TABLE IF NOT EXISTS kine
 			(
-				id INTEGER primary key autoincrement,
-				name INTEGER,
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				name TEXT NOT NULL,
 				created INTEGER,
 				deleted INTEGER,
-				create_revision INTEGER,
+				create_revision INTEGER NOT NULL,
 				prev_revision INTEGER,
 				lease INTEGER,
 				value BLOB,
 				old_value BLOB
 			)`,
-		`CREATE INDEX IF NOT EXISTS kine_name_index ON kine (name)`,
-		`CREATE UNIQUE INDEX IF NOT EXISTS kine_name_prev_revision_uindex ON kine (name, prev_revision)`,
+		`CREATE INDEX IF NOT EXISTS kine_name_index ON kine (name, id)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS kine_name_prev_revision_uindex ON kine (prev_revision, name)`,
 	}
 )
 
@@ -64,7 +64,7 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 		}
 		return err
 	}
-	dialect.GetSizeSQL = `SELECT sum(pgsize) FROM dbstat`
+	dialect.GetSizeSQL = `SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()`
 
 	// this is the first SQL that will be executed on a new DB conn so
 	// loop on failure here because in the case of dqlite it could still be initializing
@@ -89,6 +89,10 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 	//}
 
 	dialect.Migrate(context.Background())
+	if err := dialect.Prepare(); err != nil {
+		return nil, nil, err
+	}
+
 	return logstructured.New(sqllog.New(dialect)), dialect, nil
 }
 
