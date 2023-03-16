@@ -6,13 +6,14 @@ require (
 	github.com/Rican7/retry v0.1.0
 	github.com/canonical/go-dqlite v1.8.0
 	github.com/go-sql-driver/mysql v1.6.0
+	github.com/k3s-io/kine v0.9.9
 	github.com/lib/pq v1.10.2
 	github.com/mattn/go-sqlite3 v2.0.3+incompatible
 	github.com/onsi/gomega v1.27.3
 	github.com/pkg/errors v0.9.1
 	github.com/rancher/wrangler v0.8.3
 	github.com/sirupsen/logrus v1.7.0
-	github.com/urfave/cli v1.21.0
+	github.com/urfave/cli v1.22.4
 	go.etcd.io/etcd v0.0.0-20191023171146-3cf2f69b5738
 	go.etcd.io/etcd/api/v3 v3.5.0
 	go.etcd.io/etcd/client/pkg/v3 v3.5.0
