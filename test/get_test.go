@@ -28,8 +28,9 @@ func TestGet(t *testing.T) {
 		g := NewWithT(t)
 
 		// Get empty key
-		_, err := client.Get(ctx, "", clientv3.WithRange(""))
+		resp, err := client.Get(ctx, "", clientv3.WithRange(""))
 		g.Expect(err).To(BeNil())
+		g.Expect(resp.Kvs).To(HaveLen(0))
 	})
 
 	t.Run("FailRange", func(t *testing.T) {
