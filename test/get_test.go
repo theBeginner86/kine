@@ -2,7 +2,6 @@ package test
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -104,7 +103,6 @@ func TestGet(t *testing.T) {
 		// Get the updated key
 		{
 			resp, err := client.Get(ctx, key, clientv3.WithCountOnly())
-			fmt.Print(resp)
 			g.Expect(err).To(BeNil())
 			g.Expect(resp.Kvs[0].Value).To(Equal([]byte("testValue2")))
 			g.Expect(resp.Kvs[0].ModRevision).To(BeNumerically(">", resp.Kvs[0].CreateRevision))
