@@ -35,7 +35,7 @@ func TestUpdate(t *testing.T) {
 			g.Expect(resp.Kvs).To(HaveLen(1))
 			g.Expect(resp.Kvs[0].Key).To(Equal([]byte("updateNewKey")))
 			g.Expect(resp.Kvs[0].Value).To(Equal([]byte("testValue")))
-			g.Expect(resp.Kvs[0].ModRevision).To(BeNumerically("==", resp.Kvs[0].CreateRevision))
+			g.Expect(resp.Kvs[0].ModRevision).To(Equal(int64(resp.Kvs[0].CreateRevision)))
 		}
 	})
 
@@ -52,6 +52,8 @@ func TestUpdate(t *testing.T) {
 
 			g.Expect(err).To(BeNil())
 			g.Expect(resp.Succeeded).To(BeTrue())
+			g.Expect(resp.Responses).To(HaveLen(1))
+			g.Expect(resp.Responses[0].GetResponsePut()).NotTo(BeNil())
 			lastModRev = resp.Responses[0].GetResponsePut().Header.Revision
 		}
 
@@ -90,6 +92,8 @@ func TestUpdate(t *testing.T) {
 
 			g.Expect(err).To(BeNil())
 			g.Expect(resp.Succeeded).To(BeTrue())
+			g.Expect(resp.Responses).To(HaveLen(1))
+			g.Expect(resp.Responses[0].GetResponsePut()).NotTo(BeNil())
 			lastModRev = resp.Responses[0].GetResponsePut().Header.Revision
 		}
 
@@ -113,7 +117,8 @@ func TestUpdate(t *testing.T) {
 
 			g.Expect(err).To(BeNil())
 			g.Expect(resp.Succeeded).To(BeFalse())
-
+			g.Expect(resp.Responses).To(HaveLen(1))
+			g.Expect(resp.Responses[0].GetResponseRange()).ToNot(BeNil())
 		}
 
 	})
