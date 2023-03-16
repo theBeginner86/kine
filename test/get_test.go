@@ -2,6 +2,7 @@ package test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -99,11 +100,13 @@ func TestGet(t *testing.T) {
 			g.Expect(resp.Header.Revision).To(Equal(lastModRev + 1))
 		}
 
-		// Get the updated key's version
+		// Get the updated key
 		{
 			resp, err := client.Get(ctx, key, clientv3.WithCountOnly())
+			fmt.Print(resp)
 			g.Expect(err).To(BeNil())
-			g.Expect(resp.Count).To(Equal(int64(0)))
+			g.Expect(resp.Kvs[0].Value).To(Equal([]byte("testValue2")))
+			g.Expect(resp.Header.Revision).To(Equal(lastModRev + 1))
 		}
 	})
 
