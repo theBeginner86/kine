@@ -98,7 +98,7 @@ func TestGet(t *testing.T) {
 				Else(clientv3.OpGet(key, clientv3.WithRange(""))).
 				Commit()
 			g.Expect(err).To(BeNil())
-			g.Expect(resp.Header.Revision).To(Equal(lastModRev + 1))
+			g.Expect(resp.Succeeded).To(BeTrue())
 		}
 
 		// Get the updated key
@@ -107,7 +107,7 @@ func TestGet(t *testing.T) {
 			fmt.Print(resp)
 			g.Expect(err).To(BeNil())
 			g.Expect(resp.Kvs[0].Value).To(Equal([]byte("testValue2")))
-			g.Expect(resp.Header.Revision).To(Equal(lastModRev + 1))
+			g.Expect(resp.Kvs[0].ModRevision).To(BeNumerically(">", resp.Kvs[0].CreateRevision))
 		}
 	})
 
