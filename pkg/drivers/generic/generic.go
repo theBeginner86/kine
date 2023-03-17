@@ -17,12 +17,7 @@ import (
 
 var (
 	columns = "kv.id as theid, kv.name, kv.created, kv.deleted, kv.create_revision, kv.prev_revision, kv.lease, kv.value, kv.old_value"
-	//revSQL  = `
-	//	SELECT rkv.id
-	//	FROM kine rkv
-	//	ORDER BY rkv.id
-	//	DESC LIMIT 1`
-
+	
 	revSQL = `
 		SELECT MAX(rkv.id) AS id
 		FROM kine AS rkv`
