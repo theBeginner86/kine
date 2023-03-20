@@ -606,7 +606,7 @@ func getPrefixRange(prefix string) (start, end string) {
 		end = prefix[0:len(prefix)-1] + "0"
 	} else {
 		//end = prefix + "\x00"
-		end = prefix + "\n"
+		end = prefix + "\x01"
 	}
 
 	return start, end
