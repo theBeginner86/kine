@@ -17,7 +17,7 @@ import (
 
 var (
 	columns = "kv.id as theid, kv.name, kv.created, kv.deleted, kv.create_revision, kv.prev_revision, kv.lease, kv.value, kv.old_value"
-	
+
 	revSQL = `
 		SELECT MAX(rkv.id) AS id
 		FROM kine AS rkv`
@@ -54,7 +54,7 @@ var (
 			%%s
 		ORDER BY kv.id ASC
 		`, columns)
-	
+
 	revisionAfterSQL = fmt.Sprintf(`SELECT *
 		FROM (
 			SELECT %s
@@ -95,35 +95,35 @@ type ErrCode func(error) string
 type Generic struct {
 	sync.Mutex
 
-	LockWrites            bool
-	LastInsertID          bool
-	DB                    *sql.DB
-	GetCurrentSQL         string
-	GetRevisionSQL        string
-	getRevisionSQLPrepared	*sql.Stmt
-	RevisionSQL           string
-	ListRevisionStartSQL  string
-	GetRevisionAfterSQL   string
-	CountSQL              string
-	countSQLPrepared      *sql.Stmt
-	AfterSQLPrefix		string
-	afterSQLPrefixPrepared	*sql.Stmt
-	AfterSQL              string
-	DeleteSQL             string
-	deleteSQLPrepared	*sql.Stmt
-	UpdateCompactSQL      string
+	LockWrites                    bool
+	LastInsertID                  bool
+	DB                            *sql.DB
+	GetCurrentSQL                 string
+	GetRevisionSQL                string
+	getRevisionSQLPrepared        *sql.Stmt
+	RevisionSQL                   string
+	ListRevisionStartSQL          string
+	GetRevisionAfterSQL           string
+	CountSQL                      string
+	countSQLPrepared              *sql.Stmt
+	AfterSQLPrefix                string
+	afterSQLPrefixPrepared        *sql.Stmt
+	AfterSQL                      string
+	DeleteSQL                     string
+	deleteSQLPrepared             *sql.Stmt
+	UpdateCompactSQL              string
 	updateCompactSQLPrepared      *sql.Stmt
-	InsertSQL             string
-	insertSQLPrepared	*sql.Stmt
-	FillSQL               string
-	fillSQLPrepared	      *sql.Stmt
-	InsertLastInsertIDSQL string
+	InsertSQL                     string
+	insertSQLPrepared             *sql.Stmt
+	FillSQL                       string
+	fillSQLPrepared               *sql.Stmt
+	InsertLastInsertIDSQL         string
 	insertLastInsertIDSQLPrepared *sql.Stmt
-	GetSizeSQL            string
-	getSizeSQLPrepared    *sql.Stmt
-	Retry                 ErrRetry
-	TranslateErr          TranslateErr
-	ErrCode               ErrCode
+	GetSizeSQL                    string
+	getSizeSQLPrepared            *sql.Stmt
+	Retry                         ErrRetry
+	TranslateErr                  TranslateErr
+	ErrCode                       ErrCode
 
 	// CompactInterval is interval between database compactions performed by kine.
 	CompactInterval time.Duration
@@ -167,7 +167,7 @@ func (d *Generic) Migrate(ctx context.Context) {
 	if err := countKine.Scan(&count); err != nil || count != 0 {
 		return
 	}
-	
+
 	logrus.Infof("Migrating content from old table")
 	_, err := d.execute(ctx,
 		`INSERT INTO kine(deleted, create_revision, prev_revision, name, value, created, lease)
@@ -228,9 +228,9 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 
 		GetCurrentSQL:        q(fmt.Sprintf(listSQL, ""), paramCharacter, numbered),
 		ListRevisionStartSQL: q(fmt.Sprintf(listSQLRange, "AND kv.id <= ?"), paramCharacter, numbered),
-		
-		GetRevisionAfterSQL:  q(revisionAfterSQL, paramCharacter, numbered),
-			
+
+		GetRevisionAfterSQL: q(revisionAfterSQL, paramCharacter, numbered),
+
 		CountSQL: q(fmt.Sprintf(`
 			SELECT (%s), COUNT(*)
 			FROM (
@@ -275,7 +275,7 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 
 func (d *Generic) Prepare() error {
 	var err error
-	
+
 	d.getRevisionSQLPrepared, err = d.DB.Prepare(d.GetRevisionSQL)
 	if err != nil {
 		return err
@@ -494,16 +494,16 @@ func (d *Generic) List(ctx context.Context, prefix, startKey string, limit, revi
 
 func (d *Generic) Count(ctx context.Context, prefix string) (int64, int64, error) {
 	var (
-		rev	sql.NullInt64
-		id	int64
+		rev sql.NullInt64
+		id  int64
 	)
-	
+
 	start, end := getPrefixRange(prefix)
-	
+
 	row := d.queryRowPrepared(ctx, d.CountSQL, d.countSQLPrepared, start, end, false)
 	err := row.Scan(&rev, &id)
-	
-	return rev.Int64, id, err	
+
+	return rev.Int64, id, err
 }
 
 func (d *Generic) CurrentRevision(ctx context.Context) (int64, error) {
@@ -513,7 +513,7 @@ func (d *Generic) CurrentRevision(ctx context.Context) (int64, error) {
 	if err == sql.ErrNoRows {
 		return 0, nil
 	}
-		return id, err
+	return id, err
 }
 
 func (d *Generic) After(ctx context.Context, prefix string, rev, limit int64) (*sql.Rows, error) {
@@ -605,9 +605,9 @@ func getPrefixRange(prefix string) (start, end string) {
 	if strings.HasSuffix(prefix, "/") {
 		end = prefix[0:len(prefix)-1] + "0"
 	} else {
-		end = prefix + "\x00"
+		//end = prefix + "\x00"
+		end = prefix + "\n"
 	}
-	
+
 	return start, end
 }
-
