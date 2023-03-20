@@ -222,7 +222,7 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 
 		GetRevisionSQL: q(fmt.Sprintf(`
 			SELECT
-			0, 0, %s
+			%s
 			FROM kine kv
 			WHERE kv.id = ?`, columns), paramCharacter, numbered),
 
