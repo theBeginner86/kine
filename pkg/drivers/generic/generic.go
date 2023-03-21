@@ -239,15 +239,7 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 			SELECT (%s), COUNT(*)
 			FROM (
 				%s
-			) c`, revSQL, fmt.Sprintf(listSQLRange, "")), paramCharacter, numbered),
-
-		AfterSQLPrefix: q(fmt.Sprintf(`
-			SELECT %s
-			FROM kine AS kv
-			WHERE 
-				kv.name >= ? AND kv.name < ?
-				AND kv.id > ?
-			ORDER BY kv.id ASC`, columns), paramCharacter, numbered),
+			) c`, revSQL, fmt.Sprintf(listSQL, "")), paramCharacter, numbered),
 
 		AfterSQLPrefix: q(fmt.Sprintf(`
 			SELECT %s
@@ -335,6 +327,7 @@ func (d *Generic) Prepare() error {
 	}
 
 	return nil
+}
 
 func getPrefixRange(prefix string) (start, end string) {
 	start = prefix
