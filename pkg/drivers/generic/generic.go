@@ -39,7 +39,7 @@ var (
 			AND (? OR kv.deleted = 0)
 			%%s
 		ORDER BY kv.id ASC
-		`, columns)
+	`, columns)
 
 	// FIXME this query doesn't seem sound.
 	revisionAfterSQL = fmt.Sprintf(`
@@ -65,7 +65,7 @@ var (
 				) AS maxkv
 					ON maxkv.id = kv.id
 				WHERE
-          ? OR
+			        ? OR
 					kv.deleted = 0
 			) AS lkv
 			ORDER BY lkv.theid ASC
@@ -176,9 +176,9 @@ func (d *Generic) Migrate(ctx context.Context) {
 	logrus.Infof("Migrating content from old table")
 	_, err := d.execute(ctx,
 		`INSERT INTO kine(deleted, create_revision, prev_revision, name, value, created, lease)
-		SELECT 0, 0, 0, kv.name, kv.value, 1, CASE WHEN kv.ttl > 0 THEN 15 ELSE 0 END
-		FROM key_value kv
-			WHERE kv.id IN (SELECT MAX(kvd.id) FROM key_value kvd GROUP BY kvd.name)`)
+					SELECT 0, 0, 0, kv.name, kv.value, 1, CASE WHEN kv.ttl > 0 THEN 15 ELSE 0 END
+					FROM key_value kv
+						WHERE kv.id IN (SELECT MAX(kvd.id) FROM key_value kvd GROUP BY kvd.name)`)
 	if err != nil {
 		logrus.Errorf("Migration failed: %v", err)
 	}
@@ -466,6 +466,7 @@ func (d *Generic) GetCompactRevision(ctx context.Context) (int64, int64, error) 
 	if err == sql.ErrNoRows {
 		return 0, 0, nil
 	}
+
 	return compact.Int64, target.Int64, err
 }
 
@@ -489,6 +490,7 @@ func (d *Generic) ListCurrent(ctx context.Context, prefix string, limit int64, i
 	if limit > 0 {
 		sql = fmt.Sprintf("%s LIMIT %d", sql, limit)
 	}
+
 	return d.query(ctx, sql, start, end, includeDeleted)
 }
 

@@ -215,7 +215,7 @@ func (s *SQLLog) After(ctx context.Context, prefix string, revision, limit int64
 
 	compact, rev, err := s.d.GetCompactRevision(ctx)
 
-  if err != nil {
+	if err != nil {
 		return 0, nil, err
 	}
 
