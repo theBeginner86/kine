@@ -65,8 +65,7 @@ var (
 				) AS maxkv
 					ON maxkv.id = kv.id
 				WHERE
-			        ? OR
-					kv.deleted = 0
+					? OR kv.deleted = 0
 			) AS lkv
 			ORDER BY lkv.theid ASC
 		`, columns)
