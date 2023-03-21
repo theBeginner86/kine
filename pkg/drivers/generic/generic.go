@@ -28,10 +28,52 @@ var (
 		WHERE crkv.name = 'compact_rev_key'
 		ORDER BY crkv.id DESC LIMIT 1`
 
-	// For new additions to upstream kine for better compaction only - GetCompactRevision()
+	listSQL = fmt.Sprintf(`
+		SELECT %s
+		FROM kine AS kv
+			LEFT JOIN kine kv2 
+				ON kv.name = kv2.name
+				AND kv.id < kv2.id
+		WHERE kv2.name IS NULL
+			AND kv.name >= ? AND kv.name < ?
+			AND (? OR kv.deleted = 0)
+			%%s
+		ORDER BY kv.id ASC
+		`, columns)
+
+	// FIXME this query doesn't seem sound.
+	revisionAfterSQL = fmt.Sprintf(`
+			SELECT *
+			FROM (
+				SELECT %s
+				FROM kine AS kv
+				JOIN (
+					SELECT MAX(mkv.id) AS id
+					FROM kine AS mkv
+					WHERE mkv.name >= ? AND mkv.name < ?
+						AND mkv.id <= ?
+						AND mkv.id > (
+							SELECT ikv.id
+							FROM kine AS ikv
+							WHERE
+								ikv.name = ? AND
+								ikv.id <= ?
+							ORDER BY ikv.id DESC
+							LIMIT 1
+						)
+					GROUP BY mkv.name
+				) AS maxkv
+					ON maxkv.id = kv.id
+				WHERE
+          ? OR
+					kv.deleted = 0
+			) AS lkv
+			ORDER BY lkv.theid ASC
+		`, columns)
+
 	revisionIntervalSQL = `
 		SELECT (
-			SELECT crkv.prev_revision
+			SELECT crkv.prev_revision 
 			FROM kine AS crkv
 			WHERE crkv.name = 'compact_rev_key'
 			ORDER BY prev_revision
@@ -42,43 +84,6 @@ var (
 			ORDER BY id
 			DESC LIMIT 1
 		) AS high`
-
-	listSQLRange = fmt.Sprintf(`SELECT %s
-		FROM kine as kv
-			LEFT JOIN kine kv2
-				ON kv.name = kv2.name
-				AND kv.id < kv2.id
-		WHERE kv2.name IS NULL
-			AND kv.name >= ? AND kv.name < ?
-			AND (? OR kv.deleted = 0)
-			%%s
-		ORDER BY kv.id ASC
-		`, columns)
-
-	revisionAfterSQL = fmt.Sprintf(`SELECT *
-		FROM (
-			SELECT %s
-			FROM kine AS kv
-			JOIN (
-				SELECT MAX(mkv.id) AS id
-				FROM kine AS mkv
-				WHERE mkv.name >= ? AND mkv.name < ?
-					AND mkv.id <= ?
-					AND mkv.id > (
-						SELECT ikv.id
-						FROM kine ikv
-						WHERE
-							ikv.name = ? AND
-							ikv.id <= ?
-						ORDER BY ikv.id DESC
-						LIMIT 1
-					)
-				GROUP BY mkv.name
-			) AS maxkv
-				ON maxkv.id = kv.id
-			WHERE ? OR kv.deleted = 0
-		) AS lkv
-		ORDER BY lkv.theid ASC`, columns)
 )
 
 type Stripped string
@@ -226,16 +231,23 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 			FROM kine kv
 			WHERE kv.id = ?`, columns), paramCharacter, numbered),
 
-		GetCurrentSQL:        q(fmt.Sprintf(listSQLRange, ""), paramCharacter, numbered),
-		ListRevisionStartSQL: q(fmt.Sprintf(listSQLRange, "AND kv.id <= ?"), paramCharacter, numbered),
-
-		GetRevisionAfterSQL: q(revisionAfterSQL, paramCharacter, numbered),
+		GetCurrentSQL:        q(fmt.Sprintf(listSQL, ""), paramCharacter, numbered),
+		ListRevisionStartSQL: q(fmt.Sprintf(listSQL, "AND kv.id <= ?"), paramCharacter, numbered),
+		GetRevisionAfterSQL:  q(revisionAfterSQL, paramCharacter, numbered),
 
 		CountSQL: q(fmt.Sprintf(`
 			SELECT (%s), COUNT(*)
 			FROM (
 				%s
 			) c`, revSQL, fmt.Sprintf(listSQLRange, "")), paramCharacter, numbered),
+
+		AfterSQLPrefix: q(fmt.Sprintf(`
+			SELECT %s
+			FROM kine AS kv
+			WHERE 
+				kv.name >= ? AND kv.name < ?
+				AND kv.id > ?
+			ORDER BY kv.id ASC`, columns), paramCharacter, numbered),
 
 		AfterSQLPrefix: q(fmt.Sprintf(`
 			SELECT %s
@@ -323,6 +335,17 @@ func (d *Generic) Prepare() error {
 	}
 
 	return nil
+
+func getPrefixRange(prefix string) (start, end string) {
+	start = prefix
+	if strings.HasSuffix(prefix, "/") {
+		end = prefix[0:len(prefix)-1] + "0"
+	} else {
+		// we are using only readable characters
+		end = prefix + "\x01"
+	}
+
+	return start, end
 }
 
 func (d *Generic) query(ctx context.Context, sql string, args ...interface{}) (rows *sql.Rows, err error) {
@@ -478,7 +501,6 @@ func (d *Generic) ListCurrent(ctx context.Context, prefix string, limit int64, i
 
 func (d *Generic) List(ctx context.Context, prefix, startKey string, limit, revision int64, includeDeleted bool) (*sql.Rows, error) {
 	start, end := getPrefixRange(prefix)
-
 	if startKey == "" {
 		sql := d.ListRevisionStartSQL
 		if limit > 0 {
@@ -518,14 +540,6 @@ func (d *Generic) CurrentRevision(ctx context.Context) (int64, error) {
 	return id, err
 }
 
-func (d *Generic) After(ctx context.Context, rev, limit int64) (*sql.Rows, error) {
-	sql := d.AfterSQL
-	if limit > 0 {
-		sql = fmt.Sprintf("%s LIMIT %d", sql, limit)
-	}
-	return d.query(ctx, sql, rev)
-}
-
 func (d *Generic) AfterPrefix(ctx context.Context, prefix string, rev, limit int64) (*sql.Rows, error) {
 	start, end := getPrefixRange(prefix)
 	sql := d.AfterSQLPrefix
@@ -533,6 +547,14 @@ func (d *Generic) AfterPrefix(ctx context.Context, prefix string, rev, limit int
 		sql = fmt.Sprintf("%s LIMIT %d", sql, limit)
 	}
 	return d.query(ctx, sql, start, end, rev)
+}
+
+func (d *Generic) After(ctx context.Context, rev, limit int64) (*sql.Rows, error) {
+	sql := d.AfterSQL
+	if limit > 0 {
+		sql = fmt.Sprintf("%s LIMIT %d", sql, limit)
+	}
+	return d.query(ctx, sql, rev)
 }
 
 func (d *Generic) Fill(ctx context.Context, revision int64) error {
@@ -600,15 +622,4 @@ func (d *Generic) GetPollInterval() time.Duration {
 		return v
 	}
 	return time.Second
-}
-
-func getPrefixRange(prefix string) (start, end string) {
-	start = prefix
-	if strings.HasSuffix(prefix, "/") {
-		end = prefix[0:len(prefix)-1] + "0"
-	} else {
-		end = prefix + "\x01"
-	}
-
-	return start, end
 }

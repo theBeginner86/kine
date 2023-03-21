@@ -31,8 +31,8 @@ type Dialect interface {
 	List(ctx context.Context, prefix, startKey string, limit, revision int64, includeDeleted bool) (*sql.Rows, error)
 	Count(ctx context.Context, prefix string) (int64, int64, error)
 	CurrentRevision(ctx context.Context) (int64, error)
-	After(ctx context.Context, rev, limit int64) (*sql.Rows, error)
 	AfterPrefix(ctx context.Context, prefix string, rev, limit int64) (*sql.Rows, error)
+	After(ctx context.Context, rev, limit int64) (*sql.Rows, error)
 	Insert(ctx context.Context, key string, create, delete bool, createRevision, previousRevision int64, ttl int64, value, prevValue []byte) (int64, error)
 	GetRevision(ctx context.Context, revision int64) (*sql.Rows, error)
 	DeleteRevision(ctx context.Context, revision int64) error
@@ -214,7 +214,8 @@ func (s *SQLLog) After(ctx context.Context, prefix string, revision, limit int64
 	}
 
 	compact, rev, err := s.d.GetCompactRevision(ctx)
-	if err != nil {
+
+  if err != nil {
 		return 0, nil, err
 	}
 
@@ -275,7 +276,6 @@ func (s *SQLLog) List(ctx context.Context, prefix, startKey string, limit, revis
 
 func RowsToEvents(rows *sql.Rows) ([]*server.Event, error) {
 	var result []*server.Event
-
 	defer rows.Close()
 
 	for rows.Next() {
