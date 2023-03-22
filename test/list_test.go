@@ -18,7 +18,7 @@ func TestList(t *testing.T) {
 		g := NewWithT(t)
 
 		// Create some keys
-		keys := []string{"key1", "key2", "key3"}
+		keys := []string{"key/1", "key/2", "key/3"}
 		for _, key := range keys {
 			resp, err := client.Txn(ctx).
 				If(clientv3.Compare(clientv3.ModRevision(key), "=", 0)).
@@ -42,15 +42,15 @@ func TestList(t *testing.T) {
 			resp, err := client.Get(ctx, "key", clientv3.WithPrefix())
 
 			g.Expect(err).To(BeNil())
-			g.Expect(resp.Kvs).To(HaveLen(0))
+			g.Expect(resp.Kvs).To(HaveLen(3))
 		})
 
 		t.Run("ListRange", func(t *testing.T) {
-			// Get a list of with key1, as only key1 falls within the specified range.
-			resp, err := client.Get(ctx, "key1", clientv3.WithRange("key2"))
+			// Get a list of with key/1, as only key/1 falls within the specified range.
+			resp, err := client.Get(ctx, "key/1", clientv3.WithRange(""))
 
 			g.Expect(err).To(BeNil())
-			g.Expect(resp.Kvs).To(HaveLen(0))
+			g.Expect(resp.Kvs).To(HaveLen(1))
 		})
 	})
 }
