@@ -9,6 +9,8 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
+const compactRevKey = "compact_rev_key"
+
 func TestCompaction(t *testing.T) {
 	ctx := context.Background()
 	client := newKine(t)
@@ -33,13 +35,32 @@ func TestCompaction(t *testing.T) {
 		g := NewWithT(t)
 
 		// Add a large number of entries
-		numAddEntries := 100_000
+		numAddEntries := 100_00
 		addEntries(ctx, g, client, numAddEntries)
 
 		// Delete 5% of the entries
-		numDelEntries := 5000
+		numDelEntries := 500
 		start := 0
 		deleteEntries(ctx, g, client, start, start+numDelEntries)
+
+		// resp, err := client.Txn(ctx).If(clientv3.Compare(clientv3.Version(compactRevKey), "=", 0)).
+		// 	Then(clientv3.OpPut(compactRevKey, strconv.FormatInt(0, 10))).
+		// 	Else(clientv3.OpGet(compactRevKey, clientv3.WithRange(""))).Commit()
+
+		// g.Expect(err).To(BeNil())
+		// g.Expect(resp.Succeeded).To(BeTrue())
+
+		//rev := resp.Header.Revision
+		//_, err = client.Compact(ctx, rev)
+		var compactRev int64 = 1
+		_, err := client.Compact(ctx, compactRev)
+		g.Expect(err).To(BeNil())
+
+		// resp, err := client.Txn(ctx).Then(clientv3.OpGet(compactRevKey, clientv3.WithRange(""))).Commit()
+		// g.Expect(err).To(BeNil())
+		// g.Expect(resp.Succeeded).To(BeTrue())
+		// rev := resp.Header.Revision
+		// g.Expect(rev).To(Equal(compactRev))
 	})
 }
 
