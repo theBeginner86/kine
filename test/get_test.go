@@ -11,7 +11,7 @@ import (
 // TestGet is unit testing for the Get operation.
 func TestGet(t *testing.T) {
 	ctx := context.Background()
-	client := newKine(t)
+	client, _ := newKine(t) // NEW-COMPACT
 
 	t.Run("FailNotFound", func(t *testing.T) {
 		g := NewWithT(t)
@@ -170,7 +170,7 @@ func TestGet(t *testing.T) {
 // BenchmarkGet is a benchmark for the Get operation.
 func BenchmarkGet(b *testing.B) {
 	ctx := context.Background()
-	client := newKine(b)
+	client, _ := newKine(b) // NEW-COMPACT
 	g := NewWithT(b)
 
 	// create a kv

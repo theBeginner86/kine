@@ -12,7 +12,7 @@ import (
 // TestDelete is unit testing for the delete operation.
 func TestDelete(t *testing.T) {
 	ctx := context.Background()
-	client := newKine(t)
+	client, _ := newKine(t) // NEW-COMPACT
 
 	// Calling the delete method outside a transaction should fail in kine
 	t.Run("DeleteNotSupportedFails", func(t *testing.T) {
@@ -49,7 +49,7 @@ func TestDelete(t *testing.T) {
 // BenchmarkDelete is a benchmark for the delete operation.
 func BenchmarkDelete(b *testing.B) {
 	ctx := context.Background()
-	client := newKine(b)
+	client, _ := newKine(b) // NEW-COMPACT
 
 	g := NewWithT(b)
 	for i := 0; i < b.N; i++ {

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/rancher/kine/pkg/endpoint"
+	"github.com/rancher/kine/pkg/server"
 	"github.com/sirupsen/logrus"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
@@ -31,7 +32,7 @@ var (
 // newKine will panic in case of error
 //
 // newKine will return a context as well as a configured etcd client for the kine instance
-func newKine(tb testing.TB) *clientv3.Client {
+func newKine(tb testing.TB) (*clientv3.Client, server.Backend) { // NEW-COMPACT: added "server-Backend"
 	logrus.SetLevel(logrus.ErrorLevel)
 
 	dir, err := os.MkdirTemp("testdata", "dir-*")
@@ -43,7 +44,7 @@ func newKine(tb testing.TB) *clientv3.Client {
 	})
 	listener := fmt.Sprintf("unix://%s/listen.sock", dir)
 	ep := fmt.Sprintf("sqlite://%s/data.db", dir)
-	config, err := endpoint.Listen(context.Background(), endpoint.Config{
+	config, backend, err := endpoint.Listen(context.Background(), endpoint.Config{ // NEW-COMPACT: added "backend"
 		Listener: listener,
 		Endpoint: ep,
 	})
@@ -62,5 +63,5 @@ func newKine(tb testing.TB) *clientv3.Client {
 	if err != nil {
 		panic(err)
 	}
-	return client
+	return client, backend // NEW-COMPACT: added backend
 }

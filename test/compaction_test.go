@@ -13,7 +13,7 @@ const compactRevKey = "compact_rev_key"
 
 func TestCompaction(t *testing.T) {
 	ctx := context.Background()
-	client := newKine(t)
+	client, backend := newKine(t)
 
 	t.Run("SmallDatabaseDeleteEntry", func(t *testing.T) {
 		g := NewWithT(t)
@@ -43,18 +43,22 @@ func TestCompaction(t *testing.T) {
 		start := 0
 		deleteEntries(ctx, g, client, start, start+numDelEntries)
 
+		res := backend.DoCompact()
+		fmt.Println("Compaction result:", res)
+		g.Expect(res).To(BeTrue())
+
 		// resp, err := client.Txn(ctx).If(clientv3.Compare(clientv3.Version(compactRevKey), "=", 0)).
 		// 	Then(clientv3.OpPut(compactRevKey, strconv.FormatInt(0, 10))).
-		// 	Else(clientv3.OpGet(compactRevKey, clientv3.WithRange(""))).Commit()
+		// 	Else(clientv3.OpGet(compactRevKey)).Commit()
 
 		// g.Expect(err).To(BeNil())
 		// g.Expect(resp.Succeeded).To(BeTrue())
 
-		//rev := resp.Header.Revision
-		//_, err = client.Compact(ctx, rev)
-		var compactRev int64 = 1
-		_, err := client.Compact(ctx, compactRev)
-		g.Expect(err).To(BeNil())
+		// rev := resp.Header.Revision
+		// _, err = client.Compact(ctx, rev)
+		// var compactRev int64 = 1
+		// _, err := client.Compact(ctx, compactRev)
+		// g.Expect(err).To(BeNil())
 
 		// resp, err := client.Txn(ctx).Then(clientv3.OpGet(compactRevKey, clientv3.WithRange(""))).Commit()
 		// g.Expect(err).To(BeNil())
@@ -101,7 +105,7 @@ func deleteEntry(ctx context.Context, g Gomega, client *clientv3.Client, key str
 
 func BenchmarkCompaction(b *testing.B) {
 	ctx := context.Background()
-	client := newKine(b)
+	client, backend := newKine(b)
 	g := NewWithT(b)
 
 	for i := 0; i < b.N; i++ {
@@ -113,7 +117,22 @@ func BenchmarkCompaction(b *testing.B) {
 		numDelEntries := 5000
 		deleteEntries(ctx, g, client, 0, numDelEntries)
 
+		res := backend.DoCompact()
+		fmt.Println("Compaction result:", res)
+		g.Expect(res).To(BeTrue())
+
 		// Cleanup the rest of the entries before the next iteration
 		deleteEntries(ctx, g, client, numDelEntries, numAddEntries)
 	}
 }
+
+// func doCompact(ctx context.Context) error {
+// 	logrus.SetLevel(logrus.ErrorLevel)
+
+// 	res, err := endpoint.Compact(ctx)
+
+// 	if err != nil {
+// 		return nil, fmt.Errorf("compact error")
+// 	}
+// 	return res, nil
+// }

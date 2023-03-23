@@ -59,7 +59,7 @@ func run(c *cli.Context) error {
 		logrus.SetLevel(logrus.DebugLevel)
 	}
 	ctx := signals.SetupSignalHandler(context.Background())
-	_, err := endpoint.Listen(ctx, config)
+	_, _, err := endpoint.Listen(ctx, config) // NEW-COMPACT: added middle nil
 	if err != nil {
 		return err
 	}
