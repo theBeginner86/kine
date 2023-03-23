@@ -31,7 +31,7 @@ func BenchmarkLease(b *testing.B) {
 
 	g := NewWithT(b)
 	for i := 0; i < b.N; i++ {
-		var ttl int64 = int64(i * 10)
+		var ttl int64 = int64(i + 1)
 		resp, err := client.Lease.Grant(ctx, ttl)
 
 		g.Expect(err).To(BeNil())
