@@ -153,7 +153,6 @@ func (s *SQLLog) DoCompact() error {
 
 		setRev := false
 		if event.PrevKV != nil && event.PrevKV.ModRevision != 0 {
-
 			//fmt.Printf("event.PrevKV.ModRevision: %d\n", event.PrevKV.ModRevision)
 
 			if savedCursor != cursor {
@@ -172,8 +171,7 @@ func (s *SQLLog) DoCompact() error {
 		}
 
 		if event.Delete {
-
-			fmt.Printf("Delete event, cursor: %d\n", cursor)
+			//fmt.Printf("Delete event, cursor: %d\n", cursor)
 
 			if !setRev && savedCursor != cursor {
 				if err := s.d.SetCompactRevision(s.ctx, cursor); err != nil {
@@ -190,7 +188,7 @@ func (s *SQLLog) DoCompact() error {
 		}
 	}
 
-	fmt.Printf("Saved cursor: %d, Cursor: %d\n", savedCursor, cursor)
+	//fmt.Printf("Saved cursor: %d, Cursor: %d\n", savedCursor, cursor)
 
 	if savedCursor != cursor {
 		if err := s.d.SetCompactRevision(s.ctx, cursor); err != nil {
