@@ -43,7 +43,74 @@ type ETCDConfig struct {
 	LeaderElect bool
 }
 
-func Listen(ctx context.Context, config Config) (ETCDConfig, server.Backend, error) { // NEW-COMPACT: added "server-Backend"
+func Listen(ctx context.Context, config Config) (ETCDConfig, error) { // NEW-COMPACT: added "server-Backend"
+	driver, dsn := ParseStorageEndpoint(config.Endpoint)
+	if driver == ETCDBackend {
+		return ETCDConfig{
+			Endpoints:   strings.Split(config.Endpoint, ","),
+			TLSConfig:   config.Config,
+			LeaderElect: true,
+		}, nil // NEW-COMPACT
+	}
+
+	leaderelect, backend, err := getKineStorageBackend(ctx, driver, dsn, config)
+	if err != nil {
+		return ETCDConfig{}, errors.Wrap(err, "building kine") // NEW-COMPACT
+	}
+
+	if err := backend.Start(ctx); err != nil {
+		return ETCDConfig{}, errors.Wrap(err, "starting kine backend") // NEW-COMPACT
+	}
+
+	listen := config.Listener
+	if listen == "" {
+		listen = KineSocket
+	}
+
+	b := server.New(backend)
+	grpcServer := grpcServer(config)
+	b.Register(grpcServer)
+
+	listener, err := createListener(listen)
+	if err != nil {
+		return ETCDConfig{}, err // NEW-COMPACT
+	}
+
+	go func() {
+		if err := grpcServer.Serve(listener); err != nil {
+			logrus.Errorf("Kine server shutdown: %v", err)
+		}
+		<-ctx.Done()
+		grpcServer.Stop()
+		listener.Close()
+	}()
+
+	return ETCDConfig{
+		LeaderElect: leaderelect,
+		Endpoints:   []string{listen},
+		TLSConfig:   tls.Config{},
+	}, nil // NEW_COMPACT -- added "backend"
+}
+
+func createListener(listen string) (ret net.Listener, rerr error) {
+	network, address := networkAndAddress(listen)
+
+	if network == "unix" {
+		if err := os.Remove(address); err != nil && !os.IsNotExist(err) {
+			logrus.Warnf("failed to remove socket %s: %v", address, err)
+		}
+		defer func() {
+			if err := os.Chmod(address, 0600); err != nil {
+				rerr = err
+			}
+		}()
+	}
+
+	logrus.Infof("Kine listening on %s://%s", network, address)
+	return net.Listen(network, address)
+}
+
+func ListenAndReturnBackend(ctx context.Context, config Config) (ETCDConfig, server.Backend, error) { // NEW-COMPACT: added "server-Backend"
 	driver, dsn := ParseStorageEndpoint(config.Endpoint)
 	if driver == ETCDBackend {
 		return ETCDConfig{
@@ -90,24 +157,6 @@ func Listen(ctx context.Context, config Config) (ETCDConfig, server.Backend, err
 		Endpoints:   []string{listen},
 		TLSConfig:   tls.Config{},
 	}, backend, nil // NEW_COMPACT -- added "backend"
-}
-
-func createListener(listen string) (ret net.Listener, rerr error) {
-	network, address := networkAndAddress(listen)
-
-	if network == "unix" {
-		if err := os.Remove(address); err != nil && !os.IsNotExist(err) {
-			logrus.Warnf("failed to remove socket %s: %v", address, err)
-		}
-		defer func() {
-			if err := os.Chmod(address, 0600); err != nil {
-				rerr = err
-			}
-		}()
-	}
-
-	logrus.Infof("Kine listening on %s://%s", network, address)
-	return net.Listen(network, address)
 }
 
 func grpcServer(config Config) *grpc.Server {

@@ -21,7 +21,7 @@ type Backend interface {
 	Update(ctx context.Context, key string, value []byte, revision, lease int64) (int64, *KeyValue, bool, error)
 	Watch(ctx context.Context, key string, revision int64) <-chan []*Event
 	DbSize(ctx context.Context) (int64, error)
-	DoCompact() bool // NEW-COMPACT
+	DoCompact() error // NEW-COMPACT
 }
 
 type KeyValue struct {

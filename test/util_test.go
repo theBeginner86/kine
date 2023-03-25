@@ -44,7 +44,7 @@ func newKine(tb testing.TB) (*clientv3.Client, server.Backend) { // NEW-COMPACT:
 	})
 	listener := fmt.Sprintf("unix://%s/listen.sock", dir)
 	ep := fmt.Sprintf("sqlite://%s/data.db", dir)
-	config, backend, err := endpoint.Listen(context.Background(), endpoint.Config{ // NEW-COMPACT: added "backend"
+	config, backend, err := endpoint.ListenAndReturnBackend(context.Background(), endpoint.Config{ // NEW-COMPACT: added "backend"
 		Listener: listener,
 		Endpoint: ep,
 	})
