@@ -46,15 +46,13 @@ func TestCompaction(t *testing.T) {
 		initialSize, err := backend.DbSize(ctx)
 		g.Expect(err).To(BeNil())
 
-		fmt.Printf("Initialsize: %d\n", initialSize)
-
 		err = backend.DoCompact()
 		g.Expect(err).To(BeNil())
 
 		finalSize, err := backend.DbSize(ctx)
 		g.Expect(err).To(BeNil())
 
-		fmt.Printf("Compaction result: Initial size: %d, final size: %d", initialSize, finalSize)
+		fmt.Printf("Compaction result: Initial size: %d, final size: %d\n", initialSize, finalSize)
 
 		//g.Expect(finalSize < initialSize).To(BeTrue())
 
@@ -145,14 +143,3 @@ func BenchmarkCompaction(b *testing.B) {
 		deleteEntries(ctx, g, client, numDelEntries, numAddEntries)
 	}
 }
-
-// func doCompact(ctx context.Context) error {
-// 	logrus.SetLevel(logrus.ErrorLevel)
-
-// 	res, err := endpoint.Compact(ctx)
-
-// 	if err != nil {
-// 		return nil, fmt.Errorf("compact error")
-// 	}
-// 	return res, nil
-// }

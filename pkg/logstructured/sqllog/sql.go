@@ -17,14 +17,12 @@ type SQLLog struct {
 	broadcaster broadcaster.Broadcaster
 	ctx         context.Context
 	notify      chan int64
-	// comp        chan bool // NEW-COMPACT event-based compaction channel
 }
 
 func New(d Dialect) *SQLLog {
 	l := &SQLLog{
 		d:      d,
 		notify: make(chan int64, 1024),
-		// comp:   make(chan bool, 1), // NEW-COMPACT
 	}
 	return l
 }
@@ -153,8 +151,6 @@ func (s *SQLLog) DoCompact() error {
 
 		setRev := false
 		if event.PrevKV != nil && event.PrevKV.ModRevision != 0 {
-			//fmt.Printf("event.PrevKV.ModRevision: %d\n", event.PrevKV.ModRevision)
-
 			if savedCursor != cursor {
 				if err := s.d.SetCompactRevision(s.ctx, cursor); err != nil {
 					logrus.Errorf("failed to record compact revision: %v", err)
@@ -171,8 +167,6 @@ func (s *SQLLog) DoCompact() error {
 		}
 
 		if event.Delete {
-			//fmt.Printf("Delete event, cursor: %d\n", cursor)
-
 			if !setRev && savedCursor != cursor {
 				if err := s.d.SetCompactRevision(s.ctx, cursor); err != nil {
 					logrus.Errorf("failed to record compact revision: %v", err)
@@ -187,8 +181,6 @@ func (s *SQLLog) DoCompact() error {
 			}
 		}
 	}
-
-	//fmt.Printf("Saved cursor: %d, Cursor: %d\n", savedCursor, cursor)
 
 	if savedCursor != cursor {
 		if err := s.d.SetCompactRevision(s.ctx, cursor); err != nil {
