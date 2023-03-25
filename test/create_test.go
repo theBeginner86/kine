@@ -12,7 +12,7 @@ import (
 // TestCreate is unit testing for the create operation.
 func TestCreate(t *testing.T) {
 	ctx := context.Background()
-	client, _ := newKine(t) // NEW-COMPACT
+	client, _ := newKine(t)
 
 	t.Run("CreateOne", func(t *testing.T) {
 		g := NewWithT(t)
@@ -40,7 +40,7 @@ func TestCreate(t *testing.T) {
 // BenchmarkCreate is a benchmark for the Create operation.
 func BenchmarkCreate(b *testing.B) {
 	ctx := context.Background()
-	client, _ := newKine(b) // NEW-COMPACT
+	client, _ := newKine(b)
 
 	g := NewWithT(b)
 	for i := 0; i < b.N; i++ {

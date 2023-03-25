@@ -12,7 +12,7 @@ import (
 // TestUpdate is unit testing for the update operation.
 func TestUpdate(t *testing.T) {
 	ctx := context.Background()
-	client, _ := newKine(t) // NEW-COMPACT
+	client, _ := newKine(t)
 
 	// Testing that update can create a new key if ModRevision is 0
 	t.Run("UpdateNewKey", func(t *testing.T) {
@@ -128,7 +128,7 @@ func TestUpdate(t *testing.T) {
 // BenchmarkUpdate is a benchmark for the Update operation.
 func BenchmarkUpdate(b *testing.B) {
 	ctx := context.Background()
-	client, _ := newKine(b) // NEW-COMPACT
+	client, _ := newKine(b)
 
 	g := NewWithT(b)
 
