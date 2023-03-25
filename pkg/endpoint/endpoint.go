@@ -43,23 +43,23 @@ type ETCDConfig struct {
 	LeaderElect bool
 }
 
-func Listen(ctx context.Context, config Config) (ETCDConfig, error) { // NEW-COMPACT: added "server-Backend"
+func Listen(ctx context.Context, config Config) (ETCDConfig, error) {
 	driver, dsn := ParseStorageEndpoint(config.Endpoint)
 	if driver == ETCDBackend {
 		return ETCDConfig{
 			Endpoints:   strings.Split(config.Endpoint, ","),
 			TLSConfig:   config.Config,
 			LeaderElect: true,
-		}, nil // NEW-COMPACT
+		}, nil
 	}
 
 	leaderelect, backend, err := getKineStorageBackend(ctx, driver, dsn, config)
 	if err != nil {
-		return ETCDConfig{}, errors.Wrap(err, "building kine") // NEW-COMPACT
+		return ETCDConfig{}, errors.Wrap(err, "building kine")
 	}
 
 	if err := backend.Start(ctx); err != nil {
-		return ETCDConfig{}, errors.Wrap(err, "starting kine backend") // NEW-COMPACT
+		return ETCDConfig{}, errors.Wrap(err, "starting kine backend")
 	}
 
 	listen := config.Listener
@@ -73,7 +73,7 @@ func Listen(ctx context.Context, config Config) (ETCDConfig, error) { // NEW-COM
 
 	listener, err := createListener(listen)
 	if err != nil {
-		return ETCDConfig{}, err // NEW-COMPACT
+		return ETCDConfig{}, err
 	}
 
 	go func() {
@@ -89,7 +89,7 @@ func Listen(ctx context.Context, config Config) (ETCDConfig, error) { // NEW-COM
 		LeaderElect: leaderelect,
 		Endpoints:   []string{listen},
 		TLSConfig:   tls.Config{},
-	}, nil // NEW_COMPACT -- added "backend"
+	}, nil
 }
 
 func createListener(listen string) (ret net.Listener, rerr error) {
@@ -110,23 +110,23 @@ func createListener(listen string) (ret net.Listener, rerr error) {
 	return net.Listen(network, address)
 }
 
-func ListenAndReturnBackend(ctx context.Context, config Config) (ETCDConfig, server.Backend, error) { // NEW-COMPACT: added "server-Backend"
+func ListenAndReturnBackend(ctx context.Context, config Config) (ETCDConfig, server.Backend, error) {
 	driver, dsn := ParseStorageEndpoint(config.Endpoint)
 	if driver == ETCDBackend {
 		return ETCDConfig{
 			Endpoints:   strings.Split(config.Endpoint, ","),
 			TLSConfig:   config.Config,
 			LeaderElect: true,
-		}, nil, nil // NEW-COMPACT
+		}, nil, nil
 	}
 
 	leaderelect, backend, err := getKineStorageBackend(ctx, driver, dsn, config)
 	if err != nil {
-		return ETCDConfig{}, nil, errors.Wrap(err, "building kine") // NEW-COMPACT
+		return ETCDConfig{}, nil, errors.Wrap(err, "building kine")
 	}
 
 	if err := backend.Start(ctx); err != nil {
-		return ETCDConfig{}, nil, errors.Wrap(err, "starting kine backend") // NEW-COMPACT
+		return ETCDConfig{}, nil, errors.Wrap(err, "starting kine backend")
 	}
 
 	listen := config.Listener
@@ -140,7 +140,7 @@ func ListenAndReturnBackend(ctx context.Context, config Config) (ETCDConfig, ser
 
 	listener, err := createListener(listen)
 	if err != nil {
-		return ETCDConfig{}, nil, err // NEW-COMPACT
+		return ETCDConfig{}, nil, err
 	}
 
 	go func() {
@@ -156,7 +156,7 @@ func ListenAndReturnBackend(ctx context.Context, config Config) (ETCDConfig, ser
 		LeaderElect: leaderelect,
 		Endpoints:   []string{listen},
 		TLSConfig:   tls.Config{},
-	}, backend, nil // NEW_COMPACT -- added "backend"
+	}, backend, nil
 }
 
 func grpcServer(config Config) *grpc.Server {

@@ -97,7 +97,6 @@ func (s *SQLLog) compactStart(ctx context.Context) error {
 	return nil
 }
 
-// NEW-COMPACT
 // DoCompact makes a single compaction run when called. It is intended to be called
 // from test functions that have access to the backend.
 func (s *SQLLog) DoCompact() error {
