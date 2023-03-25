@@ -53,8 +53,7 @@ func TestCompaction(t *testing.T) {
 		g.Expect(err).To(BeNil())
 
 		fmt.Printf("Compaction result: Initial size: %d, final size: %d\n", initialSize, finalSize)
-
-		//g.Expect(finalSize < initialSize).To(BeTrue())
+		g.Expect(finalSize < initialSize).To(BeTrue())
 
 		// resp, err := client.Txn(ctx).If(clientv3.Compare(clientv3.Version(compactRevKey), "=", 0)).
 		// 	Then(clientv3.OpPut(compactRevKey, strconv.FormatInt(0, 10))).
@@ -138,6 +137,7 @@ func BenchmarkCompaction(b *testing.B) {
 		g.Expect(err).To(BeNil())
 
 		fmt.Printf("Compaction result: Initial size: %d, final size: %d", initialSize, finalSize)
+		g.Expect(finalSize < initialSize).To(BeTrue())
 
 		// Cleanup the rest of the entries before the next iteration
 		deleteEntries(ctx, g, client, numDelEntries, numAddEntries)
