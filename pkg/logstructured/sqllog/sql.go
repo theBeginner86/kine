@@ -206,7 +206,6 @@ func (s *SQLLog) compact() {
 	t := time.NewTicker(s.d.GetCompactInterval())
 	nextEnd, _ = s.d.CurrentRevision(s.ctx)
 
-outer:
 	for {
 		select {
 		case <-s.ctx.Done():
@@ -215,7 +214,7 @@ outer:
 		}
 
 		if nextEnd, err = s.compactor(nextEnd); err != nil {
-			continue outer
+			continue
 		}
 	}
 }
