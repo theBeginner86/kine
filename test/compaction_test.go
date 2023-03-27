@@ -27,7 +27,20 @@ func TestCompaction(t *testing.T) {
 		key := fmt.Sprintf("testkey-%d", keyNo)
 		deleteEntry(ctx, g, client, key)
 
-		// Delete the remaining entry
+		initialSize, err := backend.DbSize(ctx)
+		g.Expect(err).To(BeNil())
+
+		err = backend.DoCompact()
+		g.Expect(err).To(BeNil())
+
+		finalSize, err := backend.DbSize(ctx)
+		g.Expect(err).To(BeNil())
+
+		fmt.Printf("Compaction result: Initial size: %d, final size: %d\n", initialSize, finalSize)
+		// Expecting no compaction
+		g.Expect(finalSize == initialSize).To(BeTrue())
+
+		// Delete the remaining entry before the next test
 		deleteEntries(ctx, g, client, 1, 2)
 	})
 
@@ -53,26 +66,8 @@ func TestCompaction(t *testing.T) {
 		g.Expect(err).To(BeNil())
 
 		fmt.Printf("Compaction result: Initial size: %d, final size: %d\n", initialSize, finalSize)
+		// Expecting compaction
 		g.Expect(finalSize < initialSize).To(BeTrue())
-
-		// resp, err := client.Txn(ctx).If(clientv3.Compare(clientv3.Version(compactRevKey), "=", 0)).
-		// 	Then(clientv3.OpPut(compactRevKey, strconv.FormatInt(0, 10))).
-		// 	Else(clientv3.OpGet(compactRevKey)).Commit()
-
-		// g.Expect(err).To(BeNil())
-		// g.Expect(resp.Succeeded).To(BeTrue())
-
-		// rev := resp.Header.Revision
-		// _, err = client.Compact(ctx, rev)
-		// var compactRev int64 = 1
-		// _, err := client.Compact(ctx, compactRev)
-		// g.Expect(err).To(BeNil())
-
-		// resp, err := client.Txn(ctx).Then(clientv3.OpGet(compactRevKey, clientv3.WithRange(""))).Commit()
-		// g.Expect(err).To(BeNil())
-		// g.Expect(resp.Succeeded).To(BeTrue())
-		// rev := resp.Header.Revision
-		// g.Expect(rev).To(Equal(compactRev))
 	})
 }
 
@@ -116,19 +111,20 @@ func BenchmarkCompaction(b *testing.B) {
 	client, backend := newKine(b)
 	g := NewWithT(b)
 
+	numAddEntries := 100_000
+	numDelEntries := 5000
+	
 	for i := 0; i < b.N; i++ {
 		// Add a large number of entries
-		numAddEntries := 100_000
+		
 		addEntries(ctx, g, client, numAddEntries)
 
 		// Delete 5% of the entries
-		numDelEntries := 5000
+		
 		deleteEntries(ctx, g, client, 0, numDelEntries)
 
 		initialSize, err := backend.DbSize(ctx)
 		g.Expect(err).To(BeNil())
-
-		fmt.Printf("Initialsize: %d\n", initialSize)
 
 		err = backend.DoCompact()
 		g.Expect(err).To(BeNil())
@@ -136,7 +132,7 @@ func BenchmarkCompaction(b *testing.B) {
 		finalSize, err := backend.DbSize(ctx)
 		g.Expect(err).To(BeNil())
 
-		fmt.Printf("Compaction result: Initial size: %d, final size: %d", initialSize, finalSize)
+		// Expecting compaction
 		g.Expect(finalSize < initialSize).To(BeTrue())
 
 		// Cleanup the rest of the entries before the next iteration
