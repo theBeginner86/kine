@@ -26,7 +26,7 @@ func TestLease(t *testing.T) {
 	})
 
 	t.Run("UseLease", func(t *testing.T) {
-		var ttl int64 = 2
+		var ttl int64 = 1
 		t.Run("CreateWithLease", func(t *testing.T) {
 			g := NewWithT(t)
 			{
@@ -46,10 +46,7 @@ func TestLease(t *testing.T) {
 				g.Expect(err).To(BeNil())
 				g.Expect(resp.Succeeded).To(BeTrue())
 			}
-		})
 
-		t.Run("LeaseExistsInKey", func(t *testing.T) {
-			g := NewWithT(t)
 			{
 				resp, err := client.Get(ctx, "/leaseTestKey", clientv3.WithRange(""))
 				g.Expect(err).To(BeNil())
@@ -67,7 +64,7 @@ func TestLease(t *testing.T) {
 				resp, err := client.Get(ctx, "/leaseTestKey", clientv3.WithRange(""))
 				g.Expect(err).To(BeNil())
 				return resp.Kvs
-			}, time.Duration(ttl*2)*time.Second, "100ms", ctx).Should(BeEmpty())
+			}, time.Duration(ttl*2)*time.Second, testExpirePollPeriod, ctx).Should(BeEmpty())
 		})
 
 	})
