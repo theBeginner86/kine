@@ -40,7 +40,6 @@ func TestList(t *testing.T) {
 			g.Expect(resp.Kvs[0].Key).To(Equal([]byte("/key/1")))
 			g.Expect(resp.Kvs[1].Key).To(Equal([]byte("/key/2")))
 			g.Expect(resp.Kvs[2].Key).To(Equal([]byte("/key/3")))
-
 		})
 
 		t.Run("ListPrefix", func(t *testing.T) {
@@ -83,7 +82,6 @@ func TestList(t *testing.T) {
 			g.Expect(resp.Kvs).To(HaveLen(1))
 			g.Expect(resp.Header.Revision).ToNot(BeZero())
 			g.Expect(resp.Kvs[0].Key).To(Equal([]byte("key/other/1")))
-
 		})
 
 		t.Run("ListRange", func(t *testing.T) {
@@ -104,9 +102,9 @@ func BenchmarkList(b *testing.B) {
 	client := newKine(b)
 	g := NewWithT(b)
 
-	rep := b.N
+	numItems := b.N
 
-	for i := 0; i < rep; i++ {
+	for i := 0; i < numItems; i++ {
 		key := fmt.Sprintf("key/%d", i)
 		resp, err := client.Txn(ctx).
 			If(clientv3.Compare(clientv3.ModRevision(key), "=", 0)).
@@ -118,14 +116,13 @@ func BenchmarkList(b *testing.B) {
 		g.Expect(resp.Succeeded).To(BeTrue())
 	}
 
-	b.Run("BenchListCountKeys", func(b *testing.B) {
+	b.Run("List", func(b *testing.B) {
 		g := NewWithT(b)
-		for i := 0; i < rep; i++ {
+		for i := 0; i < b.N; i++ {
 			resp, err := client.Get(ctx, "key/", clientv3.WithPrefix())
 
 			g.Expect(err).To(BeNil())
-			g.Expect(resp.Kvs).To(HaveLen(rep))
+			g.Expect(resp.Kvs).To(HaveLen(numItems))
 		}
 	})
-
 }
