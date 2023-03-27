@@ -9,8 +9,6 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
-const compactRevKey = "compact_rev_key"
-
 func TestCompaction(t *testing.T) {
 	ctx := context.Background()
 	client, backend := newKine(t)
@@ -36,7 +34,6 @@ func TestCompaction(t *testing.T) {
 		finalSize, err := backend.DbSize(ctx)
 		g.Expect(err).To(BeNil())
 
-		fmt.Printf("Compaction result: Initial size: %d, final size: %d\n", initialSize, finalSize)
 		// Expecting no compaction
 		g.Expect(finalSize == initialSize).To(BeTrue())
 
@@ -65,7 +62,6 @@ func TestCompaction(t *testing.T) {
 		finalSize, err := backend.DbSize(ctx)
 		g.Expect(err).To(BeNil())
 
-		fmt.Printf("Compaction result: Initial size: %d, final size: %d\n", initialSize, finalSize)
 		// Expecting compaction
 		g.Expect(finalSize < initialSize).To(BeTrue())
 	})
@@ -113,14 +109,12 @@ func BenchmarkCompaction(b *testing.B) {
 
 	numAddEntries := 100_000
 	numDelEntries := 5000
-	
+
 	for i := 0; i < b.N; i++ {
 		// Add a large number of entries
-		
 		addEntries(ctx, g, client, numAddEntries)
 
 		// Delete 5% of the entries
-		
 		deleteEntries(ctx, g, client, 0, numDelEntries)
 
 		initialSize, err := backend.DbSize(ctx)

@@ -104,37 +104,46 @@ func (s *SQLLog) DoCompact() error {
 		return fmt.Errorf("failed to initialise compaction: %v", err)
 	}
 
+	nextEnd, _ := s.d.CurrentRevision(s.ctx)
+	_, err := s.compactor(nextEnd)
+
+	return err
+}
+
+func (s *SQLLog) compactor(nextEnd int64) (int64, error) {
 	currentRev, err := s.d.CurrentRevision(s.ctx)
 	if err != nil {
 		logrus.Errorf("failed to get current revision: %v", err)
-		return fmt.Errorf("failed to get current revision: %v", err)
+		return nextEnd, fmt.Errorf("failed to get current revision: %v", err)
 	}
 
 	cursor, _, err := s.d.GetCompactRevision(s.ctx)
 	if err != nil {
 		logrus.Errorf("failed to get compact revision: %v", err)
-		return fmt.Errorf("failed to get compact revision: %v", err)
+		return nextEnd, fmt.Errorf("failed to get compact revision: %v", err)
 	}
 
+	end := nextEnd
+	nextEnd = currentRev
 	// leave the last 1000
-	end := currentRev - 1000
+	end = end - 1000
+	// end := currentRev - 1000
 
 	savedCursor := cursor
 
-	fmt.Printf("CurrentRev :%d, end: %d, savedCursor: %d\n", currentRev, end, savedCursor)
 	// Purposefully start at the current and redo the current as
 	// it could have failed before actually compacting
 	for ; cursor <= end; cursor++ {
 		rows, err := s.d.GetRevision(s.ctx, cursor)
 		if err != nil {
 			logrus.Errorf("failed to get revision %d: %v", cursor, err)
-			return fmt.Errorf("failed to get revision %d: %v", cursor, err)
+			return nextEnd, fmt.Errorf("failed to get revision %d: %v", cursor, err)
 		}
 
 		events, err := RowsToEvents(rows)
 		if err != nil {
 			logrus.Errorf("failed to convert to events: %v", err)
-			return fmt.Errorf("failed to convert to events: %v", err)
+			return nextEnd, fmt.Errorf("failed to convert to events: %v", err)
 		}
 
 		if len(events) == 0 {
@@ -153,7 +162,7 @@ func (s *SQLLog) DoCompact() error {
 			if savedCursor != cursor {
 				if err := s.d.SetCompactRevision(s.ctx, cursor); err != nil {
 					logrus.Errorf("failed to record compact revision: %v", err)
-					return fmt.Errorf("failed to record compact revision: %v", err)
+					return nextEnd, fmt.Errorf("failed to record compact revision: %v", err)
 				}
 				savedCursor = cursor
 				setRev = true
@@ -161,7 +170,7 @@ func (s *SQLLog) DoCompact() error {
 
 			if err := s.d.DeleteRevision(s.ctx, event.PrevKV.ModRevision); err != nil {
 				logrus.Errorf("failed to delete revision %d: %v", event.PrevKV.ModRevision, err)
-				return fmt.Errorf("failed to delete revision %d: %v", event.PrevKV.ModRevision, err)
+				return nextEnd, fmt.Errorf("failed to delete revision %d: %v", event.PrevKV.ModRevision, err)
 			}
 		}
 
@@ -169,14 +178,14 @@ func (s *SQLLog) DoCompact() error {
 			if !setRev && savedCursor != cursor {
 				if err := s.d.SetCompactRevision(s.ctx, cursor); err != nil {
 					logrus.Errorf("failed to record compact revision: %v", err)
-					return fmt.Errorf("failed to record compact revision: %v", err)
+					return nextEnd, fmt.Errorf("failed to record compact revision: %v", err)
 				}
 				savedCursor = cursor
 			}
 
 			if err := s.d.DeleteRevision(s.ctx, cursor); err != nil {
 				logrus.Errorf("failed to delete current revision %d: %v", cursor, err)
-				return fmt.Errorf("failed to delete current revision %d: %v", cursor, err)
+				return nextEnd, fmt.Errorf("failed to delete current revision %d: %v", cursor, err)
 			}
 		}
 	}
@@ -184,16 +193,17 @@ func (s *SQLLog) DoCompact() error {
 	if savedCursor != cursor {
 		if err := s.d.SetCompactRevision(s.ctx, cursor); err != nil {
 			logrus.Errorf("failed to record compact revision: %v", err)
-			return fmt.Errorf("failed to record compact revision: %v", err)
+			return nextEnd, fmt.Errorf("failed to record compact revision: %v", err)
 		}
 	}
 
-	return nil
+	return nextEnd, nil
 }
 
 func (s *SQLLog) compact() {
 	var (
 		nextEnd int64
+		err     error
 	)
 	t := time.NewTicker(s.d.GetCompactInterval())
 	nextEnd, _ = s.d.CurrentRevision(s.ctx)
@@ -206,90 +216,94 @@ outer:
 		case <-t.C:
 		}
 
-		currentRev, err := s.d.CurrentRevision(s.ctx)
-		if err != nil {
-			logrus.Errorf("failed to get current revision: %v", err)
-			continue
+		if nextEnd, err = s.compactor(nextEnd); err != nil {
+			continue outer
 		}
 
-		end := nextEnd
-		nextEnd = currentRev
+		// currentRev, err := s.d.CurrentRevision(s.ctx)
+		// if err != nil {
+		// 	logrus.Errorf("failed to get current revision: %v", err)
+		// 	continue
+		// }
 
-		cursor, _, err := s.d.GetCompactRevision(s.ctx)
-		if err != nil {
-			logrus.Errorf("failed to get compact revision: %v", err)
-			continue
-		}
+		// end := nextEnd
+		// nextEnd = currentRev
 
-		// leave the last 1000
-		end = end - 1000
+		// cursor, _, err := s.d.GetCompactRevision(s.ctx)
+		// if err != nil {
+		// 	logrus.Errorf("failed to get compact revision: %v", err)
+		// 	continue
+		// }
 
-		savedCursor := cursor
-		// Purposefully start at the current and redo the current as
-		// it could have failed before actually compacting
-		for ; cursor <= end; cursor++ {
-			rows, err := s.d.GetRevision(s.ctx, cursor)
-			if err != nil {
-				logrus.Errorf("failed to get revision %d: %v", cursor, err)
-				continue outer
-			}
+		// // leave the last 1000
+		// end = end - 1000
 
-			events, err := RowsToEvents(rows)
-			if err != nil {
-				logrus.Errorf("failed to convert to events: %v", err)
-				continue outer
-			}
+		// savedCursor := cursor
+		// // Purposefully start at the current and redo the current as
+		// // it could have failed before actually compacting
+		// for ; cursor <= end; cursor++ {
+		// 	rows, err := s.d.GetRevision(s.ctx, cursor)
+		// 	if err != nil {
+		// 		logrus.Errorf("failed to get revision %d: %v", cursor, err)
+		// 		continue outer
+		// 	}
 
-			if len(events) == 0 {
-				continue
-			}
+		// 	events, err := RowsToEvents(rows)
+		// 	if err != nil {
+		// 		logrus.Errorf("failed to convert to events: %v", err)
+		// 		continue outer
+		// 	}
 
-			event := events[0]
+		// 	if len(events) == 0 {
+		// 		continue
+		// 	}
 
-			if event.KV.Key == "compact_rev_key" {
-				// don't compact the compact key
-				continue
-			}
+		// 	event := events[0]
 
-			setRev := false
-			if event.PrevKV != nil && event.PrevKV.ModRevision != 0 {
-				if savedCursor != cursor {
-					if err := s.d.SetCompactRevision(s.ctx, cursor); err != nil {
-						logrus.Errorf("failed to record compact revision: %v", err)
-						continue outer
-					}
-					savedCursor = cursor
-					setRev = true
-				}
+		// 	if event.KV.Key == "compact_rev_key" {
+		// 		// don't compact the compact key
+		// 		continue
+		// 	}
 
-				if err := s.d.DeleteRevision(s.ctx, event.PrevKV.ModRevision); err != nil {
-					logrus.Errorf("failed to delete revision %d: %v", event.PrevKV.ModRevision, err)
-					continue outer
-				}
-			}
+		// 	setRev := false
+		// 	if event.PrevKV != nil && event.PrevKV.ModRevision != 0 {
+		// 		if savedCursor != cursor {
+		// 			if err := s.d.SetCompactRevision(s.ctx, cursor); err != nil {
+		// 				logrus.Errorf("failed to record compact revision: %v", err)
+		// 				continue outer
+		// 			}
+		// 			savedCursor = cursor
+		// 			setRev = true
+		// 		}
 
-			if event.Delete {
-				if !setRev && savedCursor != cursor {
-					if err := s.d.SetCompactRevision(s.ctx, cursor); err != nil {
-						logrus.Errorf("failed to record compact revision: %v", err)
-						continue outer
-					}
-					savedCursor = cursor
-				}
+		// 		if err := s.d.DeleteRevision(s.ctx, event.PrevKV.ModRevision); err != nil {
+		// 			logrus.Errorf("failed to delete revision %d: %v", event.PrevKV.ModRevision, err)
+		// 			continue outer
+		// 		}
+		// 	}
 
-				if err := s.d.DeleteRevision(s.ctx, cursor); err != nil {
-					logrus.Errorf("failed to delete current revision %d: %v", cursor, err)
-					continue outer
-				}
-			}
-		}
+		// 	if event.Delete {
+		// 		if !setRev && savedCursor != cursor {
+		// 			if err := s.d.SetCompactRevision(s.ctx, cursor); err != nil {
+		// 				logrus.Errorf("failed to record compact revision: %v", err)
+		// 				continue outer
+		// 			}
+		// 			savedCursor = cursor
+		// 		}
 
-		if savedCursor != cursor {
-			if err := s.d.SetCompactRevision(s.ctx, cursor); err != nil {
-				logrus.Errorf("failed to record compact revision: %v", err)
-				continue outer
-			}
-		}
+		// 		if err := s.d.DeleteRevision(s.ctx, cursor); err != nil {
+		// 			logrus.Errorf("failed to delete current revision %d: %v", cursor, err)
+		// 			continue outer
+		// 		}
+		// 	}
+		// }
+
+		// if savedCursor != cursor {
+		// 	if err := s.d.SetCompactRevision(s.ctx, cursor); err != nil {
+		// 		logrus.Errorf("failed to record compact revision: %v", err)
+		// 		continue outer
+		// 	}
+		// }
 	}
 }
 
