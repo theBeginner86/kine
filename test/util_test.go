@@ -19,6 +19,9 @@ var (
 	// testWatchEventIdleTimeout is the amount of time to wait to ensure that no events
 	// are received when they should not.
 	testWatchEventIdleTimeout = 100 * time.Millisecond
+
+	// testExpirePollPeriod is the polling period for waiting for lease expiration
+	testExpirePollPeriod = 100 * time.Millisecond
 )
 
 // newKine spins up a new instance of kine. it also registers cleanup functions for temporary data
