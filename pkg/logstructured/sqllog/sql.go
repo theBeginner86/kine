@@ -199,10 +199,8 @@ func (s *SQLLog) compactor(nextEnd int64) (int64, error) {
 }
 
 func (s *SQLLog) compact() {
-	var (
-		nextEnd int64
-		//err     error
-	)
+	var nextEnd int64
+
 	t := time.NewTicker(s.d.GetCompactInterval())
 	nextEnd, _ = s.d.CurrentRevision(s.ctx)
 
@@ -212,10 +210,6 @@ func (s *SQLLog) compact() {
 			return
 		case <-t.C:
 		}
-
-		// if nextEnd, err = s.compactor(nextEnd); err != nil {
-		// 	continue
-		// }
 
 		nextEnd, _ = s.compactor(nextEnd)
 	}

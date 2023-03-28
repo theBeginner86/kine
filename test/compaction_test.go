@@ -35,7 +35,6 @@ func TestCompaction(t *testing.T) {
 		g.Expect(err).To(BeNil())
 
 		// Expecting no compaction
-		//g.Expect(finalSize == initialSize).To(BeTrue())
 		g.Expect(finalSize).To(BeNumerically("==", initialSize))
 
 		// Delete the remaining entry before the next test
@@ -64,7 +63,6 @@ func TestCompaction(t *testing.T) {
 		g.Expect(err).To(BeNil())
 
 		// Expecting compaction
-		//g.Expect(finalSize < initialSize).To(BeTrue())
 		g.Expect(finalSize).To(BeNumerically("<", initialSize))
 	})
 }
