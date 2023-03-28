@@ -110,6 +110,55 @@ func createListener(listen string) (ret net.Listener, rerr error) {
 	return net.Listen(network, address)
 }
 
+func ListenAndReturnBackend(ctx context.Context, config Config) (ETCDConfig, server.Backend, error) {
+	driver, dsn := ParseStorageEndpoint(config.Endpoint)
+	if driver == ETCDBackend {
+		return ETCDConfig{
+			Endpoints:   strings.Split(config.Endpoint, ","),
+			TLSConfig:   config.Config,
+			LeaderElect: true,
+		}, nil, nil
+	}
+
+	leaderelect, backend, err := getKineStorageBackend(ctx, driver, dsn, config)
+	if err != nil {
+		return ETCDConfig{}, nil, errors.Wrap(err, "building kine")
+	}
+
+	if err := backend.Start(ctx); err != nil {
+		return ETCDConfig{}, nil, errors.Wrap(err, "starting kine backend")
+	}
+
+	listen := config.Listener
+	if listen == "" {
+		listen = KineSocket
+	}
+
+	b := server.New(backend)
+	grpcServer := grpcServer(config)
+	b.Register(grpcServer)
+
+	listener, err := createListener(listen)
+	if err != nil {
+		return ETCDConfig{}, nil, err
+	}
+
+	go func() {
+		if err := grpcServer.Serve(listener); err != nil {
+			logrus.Errorf("Kine server shutdown: %v", err)
+		}
+		<-ctx.Done()
+		grpcServer.Stop()
+		listener.Close()
+	}()
+
+	return ETCDConfig{
+		LeaderElect: leaderelect,
+		Endpoints:   []string{listen},
+		TLSConfig:   tls.Config{},
+	}, backend, nil
+}
+
 func grpcServer(config Config) *grpc.Server {
 	if config.GRPCServer != nil {
 		return config.GRPCServer
