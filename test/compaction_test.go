@@ -35,7 +35,8 @@ func TestCompaction(t *testing.T) {
 		g.Expect(err).To(BeNil())
 
 		// Expecting no compaction
-		g.Expect(finalSize == initialSize).To(BeTrue())
+		//g.Expect(finalSize == initialSize).To(BeTrue())
+		g.Expect(finalSize).To(BeNumerically("==", initialSize))
 
 		// Delete the remaining entry before the next test
 		deleteEntries(ctx, g, client, 1, 2)
@@ -63,7 +64,8 @@ func TestCompaction(t *testing.T) {
 		g.Expect(err).To(BeNil())
 
 		// Expecting compaction
-		g.Expect(finalSize < initialSize).To(BeTrue())
+		//g.Expect(finalSize < initialSize).To(BeTrue())
+		g.Expect(finalSize).To(BeNumerically("<", initialSize))
 	})
 }
 
@@ -127,7 +129,8 @@ func BenchmarkCompaction(b *testing.B) {
 		g.Expect(err).To(BeNil())
 
 		// Expecting compaction
-		g.Expect(finalSize < initialSize).To(BeTrue())
+		//g.Expect(finalSize < initialSize).To(BeTrue())
+		g.Expect(finalSize).To(BeNumerically("<", initialSize))
 
 		// Cleanup the rest of the entries before the next iteration
 		deleteEntries(ctx, g, client, numDelEntries, numAddEntries)
