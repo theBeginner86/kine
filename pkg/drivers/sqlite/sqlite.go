@@ -81,7 +81,7 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 	// this is the first SQL that will be executed on a new DB conn so
 	// loop on failure here because in the case of dqlite it could still be initializing
 	for i := 0; i < 300; i++ {
-		err = setup(dialect.DB)
+		err = createTable(dialect.DB)
 		if err == nil {
 			break
 		}
@@ -96,9 +96,6 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "setup db")
 	}
-	//if err := setup(dialect.DB); err != nil {
-	//	return nil, nil, errors.Wrap(err, "setup db")
-	//}
 
 	if err := checkMigrate(context.Background(), dialect); err != nil {
 		return nil, nil, err
@@ -111,7 +108,7 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 	return logstructured.New(sqllog.New(dialect)), dialect, nil
 }
 
-func setup(db *sql.DB) error {
+func createTable(db *sql.DB) error {
 	for _, stmt := range schema {
 		_, err := db.Exec(stmt)
 		if err != nil {
@@ -156,7 +153,7 @@ func alterTableIndices(d *generic.Generic) error {
 func checkMigrate(ctx context.Context, d *generic.Generic) error {
 	row := d.DB.QueryRowContext(ctx, userVersionSQL)
 	if row == nil {
-		return fmt.Errorf("migrate: cannot find user_version pragma")
+		return fmt.Errorf("internal error: cannot find user_version pragma")
 	}
 
 	var userVersion int
@@ -173,7 +170,7 @@ func checkMigrate(ctx context.Context, d *generic.Generic) error {
 	var tableCount int
 	if err := row.Scan(&tableCount); err != nil {
 		if err == sql.ErrNoRows {
-			return fmt.Errorf("migrate: cannot get a list of tables")
+			return fmt.Errorf("internal error: cannot get table count for key_value")
 		}
 		return err
 	}
