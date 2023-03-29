@@ -52,7 +52,7 @@ var (
 
 	userVersionSQL    = `PRAGMA user_version`
 	setUserVersionSQL = `PRAGMA user_version = 1`
-	tableListSQL      = `SELECT COUNT(*) PRAGMA table_list('key_value')`
+	tableListSQL      = `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'key_value'`
 )
 
 func New(ctx context.Context, dataSourceName string) (server.Backend, error) {
@@ -78,7 +78,7 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 			return server.ErrKeyExists
 		}
 		return err
-	}	
+	}
 	dialect.GetSizeSQL = `SELECT (page_count - freelist_count) * page_size FROM pragma_page_count(), pragma_page_size(), pragma_freelist_count()`
 	// this is the first SQL that will be executed on a new DB conn so
 	// loop on failure here because in the case of dqlite it could still be initializing
@@ -102,7 +102,7 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 	//	return nil, nil, errors.Wrap(err, "setup db")
 	//}
 
-	if err := checkMigrate(context.Background(), dialect); err != nil {		
+	if err := checkMigrate(context.Background(), dialect); err != nil {
 		return nil, nil, err
 	}
 
@@ -124,7 +124,7 @@ func setup(db *sql.DB) error {
 	return nil
 }
 
-// alterTableIndices drops the given old table indices from the existing 
+// alterTableIndices drops the given old table indices from the existing
 // kine table, and creates the given new ones.
 func alterTableIndices(d *generic.Generic) error {
 	if d.LockWrites {
@@ -151,8 +151,8 @@ func alterTableIndices(d *generic.Generic) error {
 	return nil
 }
 
-// checkMigrate performs migration from an old key value table to the kine 
-// table only if the old key value table exists and migration has not been 
+// checkMigrate performs migration from an old key value table to the kine
+// table only if the old key value table exists and migration has not been
 // done already.
 func checkMigrate(ctx context.Context, d *generic.Generic) error {
 	row := d.DB.QueryRowContext(ctx, userVersionSQL)
@@ -173,7 +173,7 @@ func checkMigrate(ctx context.Context, d *generic.Generic) error {
 	row = d.DB.QueryRowContext(ctx, tableListSQL)
 
 	var tableCount int
-	if err := row.Scan(&tableCount); err != nil {		
+	if err := row.Scan(&tableCount); err != nil {
 		if err == sql.ErrNoRows {
 			return fmt.Errorf("migrate: cannot get key_value table")
 		}
