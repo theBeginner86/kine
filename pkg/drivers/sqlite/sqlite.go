@@ -6,6 +6,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"os"
 	"time"
 
@@ -35,9 +36,23 @@ var (
 				value BLOB,
 				old_value BLOB
 			)`,
-		`CREATE INDEX IF NOT EXISTS kine_name_id_index ON kine (name,id)`,
-		`CREATE UNIQUE INDEX IF NOT EXISTS kine_prev_revision_name_uindex ON kine (prev_revision, name)`,
+		// `CREATE INDEX IF NOT EXISTS kine_name_id_index ON kine (name,id)`,
+		// `CREATE UNIQUE INDEX IF NOT EXISTS kine_prev_revision_name_uindex ON kine (prev_revision, name)`,
 	}
+
+	dropIndices = []string{
+		`DROP INDEX IF EXISTS kine_name_index`,
+		`DROP INDEX IF EXISTS kine_name_prev_revision_uindex`,
+	}
+
+	createIndices = []string{
+		`CREATE INDEX IF NOT EXISTS kine_name_index ON kine (name, id)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS kine_name_prev_revision_uindex ON kine (prev_revision, name)`,
+	}
+
+	userVersionSQL    = `PRAGMA user_version`
+	setUserVersionSQL = `PRAGMA user_version = 1`
+	tableListSQL      = `SELECT COUNT(*) PRAGMA table_list('key_value')`
 )
 
 func New(ctx context.Context, dataSourceName string) (server.Backend, error) {
@@ -87,7 +102,10 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 	//	return nil, nil, errors.Wrap(err, "setup db")
 	//}
 
-	dialect.Migrate(context.Background())
+	if err := checkMigrate(context.Background(), dialect); err != nil {		
+		return nil, nil, err
+	}
+
 	if err := dialect.Prepare(); err != nil {
 		return nil, nil, err
 	}
@@ -101,6 +119,81 @@ func setup(db *sql.DB) error {
 		if err != nil {
 			return err
 		}
+	}
+
+	return nil
+}
+
+// alterTableIndices drops the given old table indices from the existing 
+// kine table, and creates the given new ones.
+func alterTableIndices(d *generic.Generic) error {
+	if d.LockWrites {
+		d.Lock()
+		defer d.Unlock()
+	}
+
+	// Drop the old indices
+	for _, stmt := range dropIndices {
+		_, err := d.DB.Exec(stmt)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Create the new indices
+	for _, stmt := range createIndices {
+		_, err := d.DB.Exec(stmt)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// checkMigrate performs migration from an old key value table to the kine 
+// table only if the old key value table exists and migration has not been 
+// done already.
+func checkMigrate(ctx context.Context, d *generic.Generic) error {
+	row := d.DB.QueryRowContext(ctx, userVersionSQL)
+	if row == nil {
+		return fmt.Errorf("migrate: cannot find user_version pragma")
+	}
+
+	var userVersion int
+	if err := row.Scan(&userVersion); err != nil {
+		fmt.Println("scan userVersion error")
+		return err
+	}
+	// No need for migration
+	if userVersion == 1 {
+		return nil
+	}
+
+	row = d.DB.QueryRowContext(ctx, tableListSQL)
+
+	var tableCount int
+	if err := row.Scan(&tableCount); err != nil {		
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("migrate: cannot get key_value table")
+		}
+		fmt.Printf("scan tableCount error: %v\n", err)
+		return err
+	}
+
+	// Perform migration from key_value table to kine table
+	if tableCount > 0 {
+		d.Migrate(ctx)
+	}
+
+	if err := alterTableIndices(d); err != nil {
+		return nil
+	}
+
+	_, err := d.DB.ExecContext(ctx, setUserVersionSQL)
+	if err != nil {
+		fmt.Println("setUserVersion error")
+		return err
 	}
 
 	return nil
