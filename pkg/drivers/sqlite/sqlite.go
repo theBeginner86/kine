@@ -36,8 +36,6 @@ var (
 				value BLOB,
 				old_value BLOB
 			)`,
-		// `CREATE INDEX IF NOT EXISTS kine_name_id_index ON kine (name,id)`,
-		// `CREATE UNIQUE INDEX IF NOT EXISTS kine_prev_revision_name_uindex ON kine (prev_revision, name)`,
 	}
 
 	dropIndices = []string{
@@ -125,7 +123,8 @@ func setup(db *sql.DB) error {
 }
 
 // alterTableIndices drops the given old table indices from the existing
-// kine table, and creates the given new ones.
+// kine table (if it exists, and if the indices exists), and then creates
+// the given new ones on the kine table.
 func alterTableIndices(d *generic.Generic) error {
 	if d.LockWrites {
 		d.Lock()
@@ -162,7 +161,6 @@ func checkMigrate(ctx context.Context, d *generic.Generic) error {
 
 	var userVersion int
 	if err := row.Scan(&userVersion); err != nil {
-		fmt.Println("scan userVersion error")
 		return err
 	}
 	// No need for migration
@@ -170,14 +168,13 @@ func checkMigrate(ctx context.Context, d *generic.Generic) error {
 		return nil
 	}
 
+	// Check if the key_value table exists
 	row = d.DB.QueryRowContext(ctx, tableListSQL)
-
 	var tableCount int
 	if err := row.Scan(&tableCount); err != nil {
 		if err == sql.ErrNoRows {
-			return fmt.Errorf("migrate: cannot get key_value table")
+			return fmt.Errorf("migrate: cannot get a list of tables")
 		}
-		fmt.Printf("scan tableCount error: %v\n", err)
 		return err
 	}
 
@@ -192,7 +189,6 @@ func checkMigrate(ctx context.Context, d *generic.Generic) error {
 
 	_, err := d.DB.ExecContext(ctx, setUserVersionSQL)
 	if err != nil {
-		fmt.Println("setUserVersion error")
 		return err
 	}
 
