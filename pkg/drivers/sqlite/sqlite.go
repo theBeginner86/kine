@@ -22,37 +22,6 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-var (
-	schema = []string{
-		`CREATE TABLE IF NOT EXISTS kine
-			(
-				id INTEGER PRIMARY KEY AUTOINCREMENT,
-				name TEXT NOT NULL,
-				created INTEGER,
-				deleted INTEGER,
-				create_revision INTEGER NOT NULL,
-				prev_revision INTEGER,
-				lease INTEGER,
-				value BLOB,
-				old_value BLOB
-			)`,
-	}
-
-	dropIndices = []string{
-		`DROP INDEX IF EXISTS kine_name_index`,
-		`DROP INDEX IF EXISTS kine_name_prev_revision_uindex`,
-	}
-
-	createIndices = []string{
-		`CREATE INDEX IF NOT EXISTS kine_name_index ON kine (name, id)`,
-		`CREATE UNIQUE INDEX IF NOT EXISTS kine_name_prev_revision_uindex ON kine (prev_revision, name)`,
-	}
-
-	userVersionSQL    = `PRAGMA user_version`
-	setUserVersionSQL = `PRAGMA user_version = 1`
-	tableListSQL      = `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'key_value'`
-)
-
 func New(ctx context.Context, dataSourceName string) (server.Backend, error) {
 	backend, _, err := NewVariant(ctx, "sqlite3", dataSourceName)
 	return backend, err
@@ -94,26 +63,37 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 		time.Sleep(time.Second)
 	}
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "setup db")
+		return nil, nil, errors.Wrap(err, "db table creation failed")
 	}
 
-	if err := checkMigrate(context.Background(), dialect); err != nil {
-		return nil, nil, err
+	if err := doMigrate(context.Background(), dialect); err != nil {
+		return nil, nil, errors.Wrap(err, "migration failed")
 	}
 
 	if err := dialect.Prepare(); err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "query preparation failed")
 	}
 
 	return logstructured.New(sqllog.New(dialect)), dialect, nil
 }
 
 func createTable(db *sql.DB) error {
-	for _, stmt := range schema {
-		_, err := db.Exec(stmt)
-		if err != nil {
-			return err
-		}
+	createTableSQL := `CREATE TABLE IF NOT EXISTS kine
+			(
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				name TEXT NOT NULL,
+				created INTEGER,
+				deleted INTEGER,
+				create_revision INTEGER NOT NULL,
+				prev_revision INTEGER,
+				lease INTEGER,
+				value BLOB,
+				old_value BLOB
+			)`
+
+	_, err := db.Exec(createTableSQL)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -128,12 +108,22 @@ func alterTableIndices(d *generic.Generic) error {
 		defer d.Unlock()
 	}
 
+	dropIndices := []string{
+		`DROP INDEX IF EXISTS kine_name_index`,
+		`DROP INDEX IF EXISTS kine_name_prev_revision_uindex`,
+	}
+
 	// Drop the old indices
 	for _, stmt := range dropIndices {
 		_, err := d.DB.Exec(stmt)
 		if err != nil {
 			return err
 		}
+	}
+
+	createIndices := []string{
+		`CREATE INDEX IF NOT EXISTS kine_name_index ON kine (name, id)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS kine_name_prev_revision_uindex ON kine (prev_revision, name)`,
 	}
 
 	// Create the new indices
@@ -150,11 +140,9 @@ func alterTableIndices(d *generic.Generic) error {
 // checkMigrate performs migration from an old key value table to the kine
 // table only if the old key value table exists and migration has not been
 // done already.
-func checkMigrate(ctx context.Context, d *generic.Generic) error {
+func doMigrate(ctx context.Context, d *generic.Generic) error {
+	userVersionSQL := `PRAGMA user_version`
 	row := d.DB.QueryRowContext(ctx, userVersionSQL)
-	if row == nil {
-		return fmt.Errorf("internal error: cannot find user_version pragma")
-	}
 
 	var userVersion int
 	if err := row.Scan(&userVersion); err != nil {
@@ -166,27 +154,28 @@ func checkMigrate(ctx context.Context, d *generic.Generic) error {
 	}
 
 	// Check if the key_value table exists
+	tableListSQL := `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'key_value'`
 	row = d.DB.QueryRowContext(ctx, tableListSQL)
 	var tableCount int
 	if err := row.Scan(&tableCount); err != nil {
-		if err == sql.ErrNoRows {
-			return fmt.Errorf("internal error: cannot get table count for key_value")
-		}
 		return err
 	}
 
 	// Perform migration from key_value table to kine table
 	if tableCount > 0 {
-		d.Migrate(ctx)
+		if err := d.Migrate(ctx); err != nil {
+			return fmt.Errorf("migration failed: %v", err)
+		}
 	}
 
 	if err := alterTableIndices(d); err != nil {
-		return nil
+		return fmt.Errorf("migration failed: %v", err)
 	}
 
+	setUserVersionSQL := `PRAGMA user_version = 1`
 	_, err := d.DB.ExecContext(ctx, setUserVersionSQL)
 	if err != nil {
-		return err
+		return fmt.Errorf("migration failed: %v", err)
 	}
 
 	return nil

@@ -157,7 +157,7 @@ func q(sql, param string, numbered bool) string {
 	})
 }
 
-func (d *Generic) Migrate(ctx context.Context) {
+func (d *Generic) Migrate(ctx context.Context) error {
 	var (
 		count     = 0
 		countKV   = d.queryRow(ctx, "SELECT COUNT(*) FROM key_value")
@@ -165,11 +165,11 @@ func (d *Generic) Migrate(ctx context.Context) {
 	)
 
 	if err := countKV.Scan(&count); err != nil || count == 0 {
-		return
+		return err
 	}
 
 	if err := countKine.Scan(&count); err != nil || count != 0 {
-		return
+		return err
 	}
 
 	logrus.Infof("Migrating content from old table")
@@ -179,8 +179,11 @@ func (d *Generic) Migrate(ctx context.Context) {
 					FROM key_value kv
 						WHERE kv.id IN (SELECT MAX(kvd.id) FROM key_value kvd GROUP BY kvd.name)`)
 	if err != nil {
-		logrus.Errorf("Migration failed: %v", err)
+		logrus.Errorf("Row migrations failed: %v", err)
+		return err
 	}
+
+	return nil
 }
 
 func openAndTest(driverName, dataSourceName string) (*sql.DB, error) {
