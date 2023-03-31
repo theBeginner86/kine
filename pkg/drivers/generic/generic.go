@@ -157,7 +157,9 @@ func q(sql, param string, numbered bool) string {
 	})
 }
 
-func (d *Generic) Migrate(ctx context.Context) error {
+// CheckTableRowCounts returns an error if the old key-value table is empty, or
+// the new Kine table is not empty
+func (d *Generic) CheckTableRowCounts(ctx context.Context) error {
 	var (
 		count     = 0
 		countKV   = d.queryRow(ctx, "SELECT COUNT(*) FROM key_value")
@@ -172,6 +174,13 @@ func (d *Generic) Migrate(ctx context.Context) error {
 		return err
 	}
 
+	return nil
+}
+
+// MigrateRows copies the rows with the latest revision ID of each set of rows with identical names,
+// from the old key_value table to the new Kine table. Only unexpired rows are copied, and their
+// TTL is reset to max.
+func (d *Generic) MigrateRows(ctx context.Context) error {
 	logrus.Infof("Migrating content from old table")
 	_, err := d.execute(ctx,
 		`INSERT INTO kine(deleted, create_revision, prev_revision, name, value, created, lease)
@@ -184,6 +193,28 @@ func (d *Generic) Migrate(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// FlushRows deletes all rows from the Kine table
+func (d *Generic) FlushRows(ctx context.Context) error {
+	logrus.Infof("Flushing kine table")
+	_, err := d.execute(ctx, `DELETE FROM kine`)
+	if err != nil {
+		logrus.Errorf("Flushing the kine table failed: %v", err)
+		return err
+	}
+
+	return nil
+}
+
+// Migrate first checks that the old key_value table and new Kine table are
+// correctly sized, and if so, it performs row migration
+func (d *Generic) Migrate(ctx context.Context) error {
+	if err := d.CheckTableRowCounts(ctx); err != nil {
+		return err
+	}
+
+	return d.MigrateRows(ctx)
 }
 
 func openAndTest(driverName, dataSourceName string) (*sql.DB, error) {

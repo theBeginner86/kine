@@ -148,7 +148,7 @@ func doMigrate(ctx context.Context, d *generic.Generic) error {
 	if err := row.Scan(&userVersion); err != nil {
 		return err
 	}
-	// No need for migration
+	// No need for migration - marker has already been set
 	if userVersion == 1 {
 		return nil
 	}
@@ -163,8 +163,31 @@ func doMigrate(ctx context.Context, d *generic.Generic) error {
 
 	// Perform migration from key_value table to kine table
 	if tableCount > 0 {
-		if err := d.Migrate(ctx); err != nil {
-			return fmt.Errorf("migration failed: %v", err)
+		if err := d.CheckTableRowCounts(ctx); err != nil {
+			return fmt.Errorf("table rows could not be counted: %v", err)
+		}
+		var err error
+		for i := 0; i < 300; i++ {
+			// Clear the kine table
+			err = d.FlushRows(ctx)
+			if err != nil {
+				logrus.Errorf("failed to flush rows: %v", err)
+				continue
+			}
+			err = d.MigrateRows(ctx)
+			if err == nil {
+				break
+			}
+			logrus.Errorf("failed to migrate rows: %v", err)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Second):
+			}
+			time.Sleep(time.Second)
+		}
+		if err != nil {
+			return errors.Wrap(err, "row migrations failed")
 		}
 	}
 
