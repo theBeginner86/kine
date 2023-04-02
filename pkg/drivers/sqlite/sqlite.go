@@ -167,26 +167,35 @@ func doMigrate(ctx context.Context, d *generic.Generic) error {
 			return fmt.Errorf("table rows could not be counted: %v", err)
 		}
 		var err error
-		for i := 0; i < 300; i++ {
-			// Clear the kine table
-			err = d.FlushRows(ctx)
-			if err != nil {
-				logrus.Errorf("failed to flush rows: %v", err)
-				continue
-			}
-			err = d.MigrateRows(ctx)
-			if err == nil {
-				break
-			}
-			logrus.Errorf("failed to migrate rows: %v", err)
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(time.Second):
-			}
-			time.Sleep(time.Second)
-		}
+		// for i := 0; i < 300; i++ {
+		// 	// Clear the kine table
+		// 	err = d.FlushRows(ctx)
+		// 	if err != nil {
+		// 		logrus.Errorf("failed to flush rows: %v", err)
+		// 		continue
+		// 	}
+		// 	err = d.MigrateRows(ctx)
+		// 	if err == nil {
+		// 		break
+		// 	}
+		// 	logrus.Errorf("failed to migrate rows: %v", err)
+		// 	select {
+		// 	case <-ctx.Done():
+		// 		return ctx.Err()
+		// 	case <-time.After(time.Second):
+		// 	}
+		// 	time.Sleep(time.Second)
+		// }
+
+		err = d.FlushRows(ctx)
 		if err != nil {
+			logrus.Errorf("failed to flush rows: %v", err)
+			return errors.Wrap(err, "row migrations failed")
+		}
+
+		err = d.MigrateRows(ctx)
+		if err != nil {
+			logrus.Errorf("failed to migrate rows: %v", err)
 			return errors.Wrap(err, "row migrations failed")
 		}
 	}
