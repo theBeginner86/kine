@@ -78,6 +78,7 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 }
 
 func createTable(db *sql.DB) error {
+	fmt.Printf("Table creation\n")
 	createTableSQL := `CREATE TABLE IF NOT EXISTS kine
 			(
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -141,6 +142,7 @@ func alterTableIndices(d *generic.Generic) error {
 // table only if the old key value table exists and migration has not been
 // done already.
 func doMigrate(ctx context.Context, d *generic.Generic) error {
+	fmt.Printf("doMigrate()\n")
 	userVersionSQL := `PRAGMA user_version`
 	row := d.DB.QueryRowContext(ctx, userVersionSQL)
 
@@ -186,13 +188,14 @@ func doMigrate(ctx context.Context, d *generic.Generic) error {
 		// 	}
 		// 	time.Sleep(time.Second)
 		// }
-
+		fmt.Printf("Flushing rows\n")
 		err = d.FlushRows(ctx)
 		if err != nil {
 			logrus.Errorf("failed to flush rows: %v", err)
 			return errors.Wrap(err, "row migrations failed")
 		}
 
+		fmt.Printf("Migrating rows\n")
 		err = d.MigrateRows(ctx)
 		if err != nil {
 			logrus.Errorf("failed to migrate rows: %v", err)
@@ -200,6 +203,7 @@ func doMigrate(ctx context.Context, d *generic.Generic) error {
 		}
 	}
 
+	fmt.Printf("Calling alterTableIndices()\n")
 	if err := alterTableIndices(d); err != nil {
 		return fmt.Errorf("migration failed: %v", err)
 	}
@@ -209,6 +213,7 @@ func doMigrate(ctx context.Context, d *generic.Generic) error {
 	if err != nil {
 		return fmt.Errorf("migration failed: %v", err)
 	}
+	fmt.Printf("Migration complete\n")
 
 	return nil
 }
