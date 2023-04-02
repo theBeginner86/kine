@@ -49,6 +49,7 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 	dialect.GetSizeSQL = `SELECT (page_count - freelist_count) * page_size FROM pragma_page_count(), pragma_page_size(), pragma_freelist_count()`
 	// this is the first SQL that will be executed on a new DB conn so
 	// loop on failure here because in the case of dqlite it could still be initializing
+	fmt.Printf("Loop to create table\n")
 	for i := 0; i < 300; i++ {
 		err = createTable(dialect.DB)
 		if err == nil {
