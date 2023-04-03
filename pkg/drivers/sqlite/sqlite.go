@@ -85,23 +85,14 @@ func setup(dialect *generic.Generic) error {
 	}
 	defer txn.Rollback()
 
-	kineTableCount, _ := countTable(txn, context.Background(), "kine")
-	// Create Kine table if it doesn't already exist
-	if kineTableCount == 0 {
-		if err := createTable(txn); err != nil {
-			return err
-		}
-	}
-
-	if err := migration(txn, ctx, dialect); err != nil {
+	if err := migration(ctx, txn, dialect); err != nil {
 		return errors.Wrap(err, "migration failed")
 	}
-	txn.Commit()
 
-	return nil
+	return txn.Commit()
 }
 
-func createTable(txn *sql.Tx) error {
+func createKineTable(txn *sql.Tx) error {
 	createTableSQL := `CREATE TABLE IF NOT EXISTS kine
 			(
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -172,21 +163,21 @@ func alterIndices(txn *sql.Tx, d *generic.Generic) error {
 }
 
 // countTable counts the number of tables with the given name, in the given transaction.
-func countTable(txn *sql.Tx, ctx context.Context, tableName string) (int, error) {
+func hasTable(ctx context.Context, txn *sql.Tx, tableName string) (bool, error) {
 	tableListSQL := fmt.Sprintf(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = '%s'`, tableName)
 	row := txn.QueryRowContext(ctx, tableListSQL)
 	var tableCount int
 	if err := row.Scan(&tableCount); err != nil {
-		return 0, err
+		return false, err
 	}
 
-	return tableCount, nil
+	return tableCount != 0, nil
 }
 
 // migration copies rows of the old key value table to the kine
 // table ONLY IF the key value table exists and migration has not been
-// done already.
-func migration(txn *sql.Tx, ctx context.Context, d *generic.Generic) error {
+// done already. It creates the kine table if it doesn't exist.
+func migration(ctx context.Context, txn *sql.Tx, d *generic.Generic) error {
 	userVersionSQL := `PRAGMA user_version`
 	row := txn.QueryRowContext(ctx, userVersionSQL)
 
@@ -203,9 +194,23 @@ func migration(txn *sql.Tx, ctx context.Context, d *generic.Generic) error {
 		return errors.Errorf("unsupported version: %d", userVersion)
 	}
 
-	tableCount, _ := countTable(txn, ctx, "key_value")
+	kineTableExists, err := hasTable(ctx, txn, "kine")
+	if err != nil {
+		return err
+	}
+	// Create Kine table if it doesn't already exist
+	if !kineTableExists {
+		if err := createKineTable(txn); err != nil {
+			return err
+		}
+	}
+
+	kvTableExists, err := hasTable(ctx, txn, "key_value")
+	if err != nil {
+		return err
+	}
 	// If the key_value table exists, perform migration from key_value table to kine table
-	if tableCount > 0 {
+	if kvTableExists {
 		if err := d.CheckTableRowCounts(txn, ctx); err != nil {
 			msg := "table row count issue before migration"
 			logrus.Errorf("%s: %v", msg, err)
@@ -232,7 +237,7 @@ func migration(txn *sql.Tx, ctx context.Context, d *generic.Generic) error {
 	}
 
 	setUserVersionSQL := `PRAGMA user_version = 1`
-	_, err := txn.ExecContext(ctx, setUserVersionSQL)
+	_, err = txn.ExecContext(ctx, setUserVersionSQL)
 	if err != nil {
 		msg := "version setting failed during migration"
 		logrus.Errorf("%s: %v", msg, err)
