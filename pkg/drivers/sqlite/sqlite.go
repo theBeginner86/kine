@@ -52,10 +52,10 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 	for i := 0; i < 300; i++ {
 		err = setup(dialect)
 		if err == nil {
-			fmt.Printf("DB setup successful")
+			fmt.Printf("DB setup successful\n")
 			break
 		}
-		fmt.Printf("failed to setup db: %v", err)
+		fmt.Printf("failed to setup db: %v\n", err)
 		logrus.Errorf("failed to setup db: %v", err)
 		select {
 		case <-ctx.Done():
@@ -85,7 +85,7 @@ func setup(dialect *generic.Generic) error {
 	}
 
 	_, count := countTable(context.Background(), dialect.DB, "kine")
-	fmt.Printf("number of tables: %d", count)
+	fmt.Printf("number of tables: %d\n", count)
 
 	if err := doMigrate(context.Background(), dialect); err != nil {
 		return errors.Wrap(err, "migration failed")
@@ -95,7 +95,7 @@ func setup(dialect *generic.Generic) error {
 }
 
 func createTable(db *sql.DB) error {
-	fmt.Printf("Create Table")
+	fmt.Printf("Create Table\n")
 	createTableSQL := `CREATE TABLE IF NOT EXISTS kine
 			(
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -155,6 +155,18 @@ func alterTableIndices(d *generic.Generic) error {
 	return nil
 }
 
+func callTables(ctx context.Context, db *sql.DB) (error, int) {
+	// Check if the key_value table exists
+	allTablesSQL := `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'`
+	row := db.QueryRowContext(ctx, allTablesSQL)
+	var count int
+	if err := row.Scan(&count); err != nil {
+		return err, 0
+	}
+
+	return nil, count
+}
+
 func countTable(ctx context.Context, db *sql.DB, tableName string) (error, int) {
 	// Check if the key_value table exists
 	tableListSQL := fmt.Sprintf(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = '%s'`, tableName)
@@ -185,6 +197,9 @@ func doMigrate(ctx context.Context, d *generic.Generic) error {
 	// }
 
 	fmt.Printf("user version pass\n")
+
+	_, allTables := callTables(context.Background(), d.DB)
+	fmt.Printf("all tables count :%d\n", allTables)
 
 	// Check if the key_value table exists
 	_, tableCount := countTable(context.Background(), d.DB, "key_value")
