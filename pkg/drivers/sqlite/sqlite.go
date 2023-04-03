@@ -84,7 +84,8 @@ func setup(dialect *generic.Generic) error {
 		return err
 	}
 
-	fmt.Printf("number of tables: %d", countTable(context.Background(), dialect.DB, "kine"))
+	_, count := countTable(context.Background(), dialect.DB, "kine")
+	fmt.Printf("number of tables: %d", count)
 
 	if err := doMigrate(context.Background(), dialect); err != nil {
 		return errors.Wrap(err, "migration failed")
@@ -154,18 +155,18 @@ func alterTableIndices(d *generic.Generic) error {
 	return nil
 }
 
-func countTable(ctx context.Context, db *sql.DB, tableName string) error {
+func countTable(ctx context.Context, db *sql.DB, tableName string) (error, int) {
 	// Check if the key_value table exists
 	tableListSQL := fmt.Sprintf(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = '%s'`, tableName)
 	row := db.QueryRowContext(ctx, tableListSQL)
 	var tableCount int
 	if err := row.Scan(&tableCount); err != nil {
-		return err
+		return err, 0
 	}
 
 	fmt.Printf("table count :%d", tableCount)
 
-	return nil
+	return nil, tableCount
 }
 
 // checkMigrate performs migration from an old key value table to the kine
