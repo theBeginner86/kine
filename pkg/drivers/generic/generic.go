@@ -159,11 +159,11 @@ func q(sql, param string, numbered bool) string {
 
 // CheckTableRowCounts returns an error if the old key-value table is empty, or
 // the new Kine table is not empty
-func (d *Generic) CheckTableRowCounts(ctx context.Context) error {
+func (d *Generic) CheckTableRowCounts(txn *sql.Tx, ctx context.Context) error {
 	var (
 		count     = 0
-		countKV   = d.queryRow(ctx, "SELECT COUNT(*) FROM key_value")
-		countKine = d.queryRow(ctx, "SELECT COUNT(*) FROM kine")
+		countKV   = txn.QueryRowContext(ctx, "SELECT COUNT(*) FROM key_value")
+		countKine = txn.QueryRowContext(ctx, "SELECT COUNT(*) FROM kine")
 	)
 
 	if err := countKV.Scan(&count); err != nil || count == 0 {
@@ -180,13 +180,14 @@ func (d *Generic) CheckTableRowCounts(ctx context.Context) error {
 // MigrateRows copies the rows with the latest revision ID of each set of rows with identical names,
 // from the old key_value table to the new Kine table. Only unexpired rows are copied, and their
 // TTL is reset to max.
-func (d *Generic) MigrateRows(ctx context.Context) error {
+func (d *Generic) MigrateRows(txn *sql.Tx, ctx context.Context) error {
 	logrus.Infof("Migrating content from old table")
-	_, err := d.execute(ctx,
-		`INSERT INTO kine(deleted, create_revision, prev_revision, name, value, created, lease)
+	insertSQL := `INSERT INTO kine(deleted, create_revision, prev_revision, name, value, created, lease)
 					SELECT 0, 0, 0, kv.name, kv.value, 1, CASE WHEN kv.ttl > 0 THEN 15 ELSE 0 END
 					FROM key_value kv
-						WHERE kv.id IN (SELECT MAX(kvd.id) FROM key_value kvd GROUP BY kvd.name)`)
+						WHERE kv.id IN (SELECT MAX(kvd.id) FROM key_value kvd GROUP BY kvd.name)`
+
+	_, err := txn.ExecContext(ctx, insertSQL)
 	if err != nil {
 		logrus.Errorf("Row migrations failed: %v", err)
 		return err
@@ -208,13 +209,33 @@ func (d *Generic) FlushRows(ctx context.Context) error {
 }
 
 // Migrate first checks that the old key_value table and new Kine table are
-// correctly sized, and if so, it performs row migration
-func (d *Generic) Migrate(ctx context.Context) error {
-	if err := d.CheckTableRowCounts(ctx); err != nil {
-		return err
+// correctly sized, and if so, it performs row migration. It's a legacy method,
+// supporting MySQL and PGSql
+func (d *Generic) Migrate(ctx context.Context) {
+	var (
+		count     = 0
+		countKV   = d.queryRow(ctx, "SELECT COUNT(*) FROM key_value")
+		countKine = d.queryRow(ctx, "SELECT COUNT(*) FROM kine")
+	)
+
+	if err := countKV.Scan(&count); err != nil || count == 0 {
+		return
 	}
 
-	return d.MigrateRows(ctx)
+	if err := countKine.Scan(&count); err != nil || count != 0 {
+		return
+	}
+
+	logrus.Infof("Migrating content from old table")
+	_, err := d.execute(ctx,
+		`INSERT INTO kine(deleted, create_revision, prev_revision, name, value, created, lease)
+					SELECT 0, 0, 0, kv.name, kv.value, 1, CASE WHEN kv.ttl > 0 THEN 15 ELSE 0 END
+					FROM key_value kv
+						WHERE kv.id IN (SELECT MAX(kvd.id) FROM key_value kvd GROUP BY kvd.name)`)
+	if err != nil {
+		logrus.Errorf("Row migrations failed: %v", err)
+
+	}
 }
 
 func openAndTest(driverName, dataSourceName string) (*sql.DB, error) {

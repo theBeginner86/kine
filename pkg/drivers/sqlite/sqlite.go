@@ -79,22 +79,38 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 	return logstructured.New(sqllog.New(dialect)), dialect, nil
 }
 
+// setup performs table setup, which may include creation of the Kine table if
+// it doesn't already exist, migrating key_value table contents to the Kine
+// table if the key_value table exists, all in a single database transaction.
+// changes are rolled back if an error occurs.
 func setup(dialect *generic.Generic) error {
-	if err := createTable(dialect.DB); err != nil {
+	ctx := context.Background()
+	txn, err := dialect.DB.BeginTx(ctx, nil)
+	if err != nil {
 		return err
 	}
+	defer txn.Rollback()
 
-	_, count := countTable(context.Background(), dialect.DB, "kine")
-	fmt.Printf("number of tables: %d\n", count)
+	kineTableCount, _ := countTable(txn, context.Background(), "kine")
+	fmt.Printf("kine table count :%d\n", kineTableCount)
 
-	if err := doMigrate(context.Background(), dialect); err != nil {
+	// Create Kine table if it doesn't already exist
+	if kineTableCount == 0 {
+		if err := createTable(txn); err != nil {
+			return err
+		}
+	}
+
+	if err := migration(txn, ctx, dialect); err != nil {
 		return errors.Wrap(err, "migration failed")
 	}
+
+	txn.Commit()
 
 	return nil
 }
 
-func createTable(db *sql.DB) error {
+func createTable(txn *sql.Tx) error {
 	fmt.Printf("Create Table\n")
 	createTableSQL := `CREATE TABLE IF NOT EXISTS kine
 			(
@@ -109,7 +125,7 @@ func createTable(db *sql.DB) error {
 				old_value BLOB
 			)`
 
-	_, err := db.Exec(createTableSQL)
+	_, err := txn.Exec(createTableSQL)
 	if err != nil {
 		return err
 	}
@@ -117,10 +133,19 @@ func createTable(db *sql.DB) error {
 	return nil
 }
 
-// alterTableIndices drops the given old table indices from the existing
-// kine table (if it exists, and if the indices exists), and then creates
-// the given new ones on the kine table.
-func alterTableIndices(d *generic.Generic) error {
+func removeTable(txn *sql.Tx, tableName string) error {
+	dropTableSQL := fmt.Sprintf(`DROP TABLE IF EXISTS %s`, tableName)
+	_, err := txn.Exec(dropTableSQL)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// alterIndices drops the given old database indices and creates
+// the given new ones.
+func alterIndices(txn *sql.Tx, d *generic.Generic) error {
 	if d.LockWrites {
 		d.Lock()
 		defer d.Unlock()
@@ -133,7 +158,7 @@ func alterTableIndices(d *generic.Generic) error {
 
 	// Drop the old indices
 	for _, stmt := range dropIndices {
-		_, err := d.DB.Exec(stmt)
+		_, err := txn.Exec(stmt)
 		if err != nil {
 			return err
 		}
@@ -146,7 +171,7 @@ func alterTableIndices(d *generic.Generic) error {
 
 	// Create the new indices
 	for _, stmt := range createIndices {
-		_, err := d.DB.Exec(stmt)
+		_, err := txn.Exec(stmt)
 		if err != nil {
 			return err
 		}
@@ -155,106 +180,94 @@ func alterTableIndices(d *generic.Generic) error {
 	return nil
 }
 
-func countTables(ctx context.Context, db *sql.DB) (error, int) {
-	// Check if the key_value table exists
-	allTablesSQL := `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'`
-	row := db.QueryRowContext(ctx, allTablesSQL)
-	var count int
-	if err := row.Scan(&count); err != nil {
-		return err, 0
-	}
+// func countTables(ctx context.Context, db *sql.DB) (error, int) {
+// 	// Check if the key_value table exists
+// 	allTablesSQL := `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'`
+// 	row := db.QueryRowContext(ctx, allTablesSQL)
+// 	var count int
+// 	if err := row.Scan(&count); err != nil {
+// 		return err, 0
+// 	}
 
-	return nil, count
-}
+// 	return nil, count
+// }
 
-func tableNames(ctx context.Context, db *sql.DB) (error, []string) {
-	// Check if the key_value table exists
-	tableNamesSQL := `SELECT name FROM sqlite_master WHERE type = 'table'`
-	row := db.QueryRowContext(ctx, tableNamesSQL)
-	var tableNames []string
-	if err := row.Scan(&tableNames); err != nil {
-		return err, []string{}
-	}
+// func tableNames(ctx context.Context, db *sql.DB) (error, []string) {
+// 	// Check if the key_value table exists
+// 	tableNamesSQL := `SELECT name FROM sqlite_master WHERE type = 'table'`
+// 	row := db.QueryRowContext(ctx, tableNamesSQL)
+// 	var tableNames []string
+// 	if err := row.Scan(&tableNames); err != nil {
+// 		return err, []string{}
+// 	}
 
-	return nil, tableNames
-}
+// 	return nil, tableNames
+// }
 
-func countTable(ctx context.Context, db *sql.DB, tableName string) (error, int) {
+func countTable(txn *sql.Tx, ctx context.Context, tableName string) (int, error) {
 	// Check if the key_value table exists
 	tableListSQL := fmt.Sprintf(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = '%s'`, tableName)
-	row := db.QueryRowContext(ctx, tableListSQL)
+	row := txn.QueryRowContext(ctx, tableListSQL)
 	var tableCount int
 	if err := row.Scan(&tableCount); err != nil {
-		return err, 0
+		return 0, err
 	}
 
-	return nil, tableCount
+	return tableCount, nil
 }
 
-// checkMigrate performs migration from an old key value table to the kine
-// table only if the old key value table exists and migration has not been
+// migration copies rows of the old key value table to the kine
+// table ONLY IF the key value table exists and migration has not been
 // done already.
-func doMigrate(ctx context.Context, d *generic.Generic) error {
-	fmt.Printf("do migrate\n")
+func migration(txn *sql.Tx, ctx context.Context, d *generic.Generic) error {
 	userVersionSQL := `PRAGMA user_version`
-	row := d.DB.QueryRowContext(ctx, userVersionSQL)
+	row := txn.QueryRowContext(ctx, userVersionSQL)
 
 	var userVersion int
 	if err := row.Scan(&userVersion); err != nil {
 		return err
 	}
 	// No need for migration - marker has already been set
-	// if userVersion == 1 {
-	// 	return nil
-	// }
-
-	fmt.Printf("user version pass\n")
-
-	_, allTables := countTables(context.Background(), d.DB)
-	fmt.Printf("all tables count :%d\n", allTables)
-
-	_, names := tableNames(context.Background(), d.DB)
-	fmt.Printf("all tables count :%v\n", names)
-
-	_, kineTable := countTable(context.Background(), d.DB, "kine")
-	fmt.Printf("kine table count :%d\n", kineTable)
+	if userVersion == 1 {
+		return nil
+	}
 
 	// Check if the key_value table exists
-	_, tableCount := countTable(context.Background(), d.DB, "key_value")
-	// tableListSQL := `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'key_value'`
-	// row = d.DB.QueryRowContext(ctx, tableListSQL)
-	// var tableCount int
-	// if err := row.Scan(&tableCount); err != nil {
-	// 	return err
-	// }
+	tableCount, _ := countTable(txn, ctx, "key_value")
 	fmt.Printf("key_value table count :%d\n", tableCount)
 
-	// Perform migration from key_value table to kine table
+	// If the key_value table exists, perform migration from key_value table to kine table
 	if tableCount > 0 {
 		fmt.Printf("CheckTableRowCounts")
-		if err := d.CheckTableRowCounts(ctx); err != nil {
-			msg := "table rows could not be counted during migration"
+		if err := d.CheckTableRowCounts(txn, ctx); err != nil {
+			msg := "table row count issue before migration"
 			logrus.Errorf("%s: %v", msg, err)
 			return errors.Wrap(err, msg)
 		}
 
 		fmt.Printf("MigrateRows")
-		err := d.MigrateRows(ctx)
-		if err != nil {
+		if err := d.MigrateRows(txn, ctx); err != nil {
 			msg := "failed to migrate rows"
+			logrus.Errorf("%s: %v", msg, err)
+			return errors.Wrap(err, msg)
+		}
+
+		fmt.Printf("Remove key_value table")
+		if err := removeTable(txn, "key_value"); err != nil {
+			msg := "unable to remove key_value table during migration"
 			logrus.Errorf("%s: %v", msg, err)
 			return errors.Wrap(err, msg)
 		}
 	}
 
-	if err := alterTableIndices(d); err != nil {
-		msg := "table index changes failed during migration"
+	if err := alterIndices(txn, d); err != nil {
+		msg := "index changes failed during migration"
 		logrus.Errorf("%s: %v", msg, err)
 		return errors.Wrap(err, msg)
 	}
 
 	setUserVersionSQL := `PRAGMA user_version = 1`
-	_, err := d.DB.ExecContext(ctx, setUserVersionSQL)
+	_, err := txn.ExecContext(ctx, setUserVersionSQL)
 	if err != nil {
 		msg := "version setting failed during migration"
 		logrus.Errorf("%s: %v", msg, err)
