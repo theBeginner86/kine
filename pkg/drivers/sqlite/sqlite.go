@@ -67,9 +67,9 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 		return nil, nil, errors.Wrap(err, "db table creation failed")
 	}
 
-	if err := doMigrate(context.Background(), dialect); err != nil {
-		return nil, nil, errors.Wrap(err, "migration failed")
-	}
+	// if err := doMigrate(context.Background(), dialect); err != nil {
+	// 	return nil, nil, errors.Wrap(err, "migration failed")
+	// }
 
 	if err := dialect.Prepare(); err != nil {
 		return nil, nil, errors.Wrap(err, "query preparation failed")
@@ -83,9 +83,9 @@ func setup(dialect *generic.Generic) error {
 		return err
 	}
 
-	// if err := doMigrate(context.Background(), dialect); err != nil {
-	// 	return errors.Wrap(err, "migration failed")
-	// }
+	if err := doMigrate(context.Background(), dialect); err != nil {
+		return errors.Wrap(err, "migration failed")
+	}
 
 	return nil
 }
@@ -176,12 +176,14 @@ func doMigrate(ctx context.Context, d *generic.Generic) error {
 
 	// Perform migration from key_value table to kine table
 	if tableCount > 0 {
+		fmt.Printf("CheckTableRowCounts")
 		if err := d.CheckTableRowCounts(ctx); err != nil {
 			msg := "table rows could not be counted during migration"
 			logrus.Errorf("%s: %v", msg, err)
 			return errors.Wrap(err, msg)
 		}
 
+		fmt.Printf("MigrateRows")
 		err := d.MigrateRows(ctx)
 		if err != nil {
 			msg := "failed to migrate rows"
