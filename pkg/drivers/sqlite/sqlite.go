@@ -199,6 +199,10 @@ func migration(txn *sql.Tx, ctx context.Context, d *generic.Generic) error {
 		return nil
 	}
 
+	if userVersion > 1 {
+		return errors.Errorf("unsupported version: %d", userVersion)
+	}
+
 	tableCount, _ := countTable(txn, ctx, "key_value")
 	// If the key_value table exists, perform migration from key_value table to kine table
 	if tableCount > 0 {
