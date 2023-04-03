@@ -52,6 +52,7 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 	for i := 0; i < 300; i++ {
 		err = setup(dialect)
 		if err == nil {
+			fmt.Printf("DB setup successful")
 			break
 		}
 		fmt.Printf("failed to setup db: %v", err)
@@ -91,6 +92,7 @@ func setup(dialect *generic.Generic) error {
 }
 
 func createTable(db *sql.DB) error {
+	fmt.Printf("Create Table")
 	createTableSQL := `CREATE TABLE IF NOT EXISTS kine
 			(
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -154,6 +156,7 @@ func alterTableIndices(d *generic.Generic) error {
 // table only if the old key value table exists and migration has not been
 // done already.
 func doMigrate(ctx context.Context, d *generic.Generic) error {
+	fmt.Printf("do migrate")
 	userVersionSQL := `PRAGMA user_version`
 	row := d.DB.QueryRowContext(ctx, userVersionSQL)
 
