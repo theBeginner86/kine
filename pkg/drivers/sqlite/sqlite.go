@@ -171,7 +171,7 @@ func countTable(ctx context.Context, db *sql.DB, tableName string) (error, int) 
 // table only if the old key value table exists and migration has not been
 // done already.
 func doMigrate(ctx context.Context, d *generic.Generic) error {
-	fmt.Printf("do migrate")
+	fmt.Printf("do migrate\n")
 	userVersionSQL := `PRAGMA user_version`
 	row := d.DB.QueryRowContext(ctx, userVersionSQL)
 
@@ -184,7 +184,7 @@ func doMigrate(ctx context.Context, d *generic.Generic) error {
 	// 	return nil
 	// }
 
-	fmt.Printf("user version pass")
+	fmt.Printf("user version pass\n")
 
 	// Check if the key_value table exists
 	_, tableCount := countTable(context.Background(), d.DB, "key_value")
@@ -194,7 +194,7 @@ func doMigrate(ctx context.Context, d *generic.Generic) error {
 	// if err := row.Scan(&tableCount); err != nil {
 	// 	return err
 	// }
-	fmt.Printf("table count :%d", tableCount)
+	fmt.Printf("table count :%d\n", tableCount)
 
 	// Perform migration from key_value table to kine table
 	if tableCount > 0 {
