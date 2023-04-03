@@ -201,6 +201,9 @@ func doMigrate(ctx context.Context, d *generic.Generic) error {
 	_, allTables := countTables(context.Background(), d.DB)
 	fmt.Printf("all tables count :%d\n", allTables)
 
+	_, kineTable := countTable(context.Background(), d.DB, "kine")
+	fmt.Printf("kine table count :%d\n", kineTable)
+
 	// Check if the key_value table exists
 	_, tableCount := countTable(context.Background(), d.DB, "key_value")
 	// tableListSQL := `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'key_value'`
