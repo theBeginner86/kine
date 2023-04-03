@@ -155,7 +155,7 @@ func alterTableIndices(d *generic.Generic) error {
 	return nil
 }
 
-func callTables(ctx context.Context, db *sql.DB) (error, int) {
+func countTables(ctx context.Context, db *sql.DB) (error, int) {
 	// Check if the key_value table exists
 	allTablesSQL := `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'`
 	row := db.QueryRowContext(ctx, allTablesSQL)
@@ -198,7 +198,7 @@ func doMigrate(ctx context.Context, d *generic.Generic) error {
 
 	fmt.Printf("user version pass\n")
 
-	_, allTables := callTables(context.Background(), d.DB)
+	_, allTables := countTables(context.Background(), d.DB)
 	fmt.Printf("all tables count :%d\n", allTables)
 
 	// Check if the key_value table exists
