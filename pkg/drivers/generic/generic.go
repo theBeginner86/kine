@@ -196,18 +196,6 @@ func (d *Generic) MigrateRows(txn *sql.Tx, ctx context.Context) error {
 	return nil
 }
 
-// FlushRows deletes all rows from the Kine table
-func (d *Generic) FlushRows(ctx context.Context) error {
-	logrus.Infof("Flushing kine table")
-	_, err := d.execute(ctx, `DELETE FROM kine`)
-	if err != nil {
-		logrus.Errorf("Flushing the kine table failed: %v", err)
-		return err
-	}
-
-	return nil
-}
-
 // Migrate first checks that the old key_value table and new Kine table are
 // correctly sized, and if so, it performs row migration. It's a legacy method,
 // supporting MySQL and PGSql
@@ -234,7 +222,6 @@ func (d *Generic) Migrate(ctx context.Context) {
 						WHERE kv.id IN (SELECT MAX(kvd.id) FROM key_value kvd GROUP BY kvd.name)`)
 	if err != nil {
 		logrus.Errorf("Row migrations failed: %v", err)
-
 	}
 }
 

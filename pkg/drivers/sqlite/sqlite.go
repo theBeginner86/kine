@@ -52,10 +52,8 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 	for i := 0; i < 300; i++ {
 		err = setup(dialect)
 		if err == nil {
-			fmt.Printf("DB setup successful\n")
 			break
 		}
-		fmt.Printf("failed to setup db: %v\n", err)
 		logrus.Errorf("failed to setup db: %v", err)
 		select {
 		case <-ctx.Done():
@@ -67,10 +65,6 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "db table creation failed")
 	}
-
-	// if err := doMigrate(context.Background(), dialect); err != nil {
-	// 	return nil, nil, errors.Wrap(err, "migration failed")
-	// }
 
 	if err := dialect.Prepare(); err != nil {
 		return nil, nil, errors.Wrap(err, "query preparation failed")
@@ -92,8 +86,6 @@ func setup(dialect *generic.Generic) error {
 	defer txn.Rollback()
 
 	kineTableCount, _ := countTable(txn, context.Background(), "kine")
-	fmt.Printf("kine table count :%d\n", kineTableCount)
-
 	// Create Kine table if it doesn't already exist
 	if kineTableCount == 0 {
 		if err := createTable(txn); err != nil {
@@ -104,14 +96,12 @@ func setup(dialect *generic.Generic) error {
 	if err := migration(txn, ctx, dialect); err != nil {
 		return errors.Wrap(err, "migration failed")
 	}
-
 	txn.Commit()
 
 	return nil
 }
 
 func createTable(txn *sql.Tx) error {
-	fmt.Printf("Create Table\n")
 	createTableSQL := `CREATE TABLE IF NOT EXISTS kine
 			(
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -133,6 +123,7 @@ func createTable(txn *sql.Tx) error {
 	return nil
 }
 
+// removeTable drops the table with the given name, in the given transaction.
 func removeTable(txn *sql.Tx, tableName string) error {
 	dropTableSQL := fmt.Sprintf(`DROP TABLE IF EXISTS %s`, tableName)
 	_, err := txn.Exec(dropTableSQL)
@@ -180,32 +171,8 @@ func alterIndices(txn *sql.Tx, d *generic.Generic) error {
 	return nil
 }
 
-// func countTables(ctx context.Context, db *sql.DB) (error, int) {
-// 	// Check if the key_value table exists
-// 	allTablesSQL := `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'`
-// 	row := db.QueryRowContext(ctx, allTablesSQL)
-// 	var count int
-// 	if err := row.Scan(&count); err != nil {
-// 		return err, 0
-// 	}
-
-// 	return nil, count
-// }
-
-// func tableNames(ctx context.Context, db *sql.DB) (error, []string) {
-// 	// Check if the key_value table exists
-// 	tableNamesSQL := `SELECT name FROM sqlite_master WHERE type = 'table'`
-// 	row := db.QueryRowContext(ctx, tableNamesSQL)
-// 	var tableNames []string
-// 	if err := row.Scan(&tableNames); err != nil {
-// 		return err, []string{}
-// 	}
-
-// 	return nil, tableNames
-// }
-
+// countTable counts the number of tables with the given name, in the given transaction.
 func countTable(txn *sql.Tx, ctx context.Context, tableName string) (int, error) {
-	// Check if the key_value table exists
 	tableListSQL := fmt.Sprintf(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = '%s'`, tableName)
 	row := txn.QueryRowContext(ctx, tableListSQL)
 	var tableCount int
@@ -232,27 +199,21 @@ func migration(txn *sql.Tx, ctx context.Context, d *generic.Generic) error {
 		return nil
 	}
 
-	// Check if the key_value table exists
 	tableCount, _ := countTable(txn, ctx, "key_value")
-	fmt.Printf("key_value table count :%d\n", tableCount)
-
 	// If the key_value table exists, perform migration from key_value table to kine table
 	if tableCount > 0 {
-		fmt.Printf("CheckTableRowCounts")
 		if err := d.CheckTableRowCounts(txn, ctx); err != nil {
 			msg := "table row count issue before migration"
 			logrus.Errorf("%s: %v", msg, err)
 			return errors.Wrap(err, msg)
 		}
 
-		fmt.Printf("MigrateRows")
 		if err := d.MigrateRows(txn, ctx); err != nil {
 			msg := "failed to migrate rows"
 			logrus.Errorf("%s: %v", msg, err)
 			return errors.Wrap(err, msg)
 		}
 
-		fmt.Printf("Remove key_value table")
 		if err := removeTable(txn, "key_value"); err != nil {
 			msg := "unable to remove key_value table during migration"
 			logrus.Errorf("%s: %v", msg, err)
