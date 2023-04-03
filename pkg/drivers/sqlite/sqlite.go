@@ -162,6 +162,8 @@ func countTable(ctx context.Context, db *sql.DB, tableName string) error {
 	}
 
 	fmt.Printf("table count :%d", tableCount)
+
+	return nil
 }
 
 // checkMigrate performs migration from an old key value table to the kine
