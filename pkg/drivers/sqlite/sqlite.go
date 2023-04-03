@@ -152,6 +152,18 @@ func alterTableIndices(d *generic.Generic) error {
 	return nil
 }
 
+func countTable(ctx context.Context, db *sql.DB, tableName string) error {
+	// Check if the key_value table exists
+	tableListSQL := fmt.Sprintf(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = '%s'`, tableName)
+	row := db.QueryRowContext(ctx, tableListSQL)
+	var tableCount int
+	if err := row.Scan(&tableCount); err != nil {
+		return err
+	}
+
+	fmt.Printf("table count :%d", tableCount)
+}
+
 // checkMigrate performs migration from an old key value table to the kine
 // table only if the old key value table exists and migration has not been
 // done already.
@@ -165,9 +177,9 @@ func doMigrate(ctx context.Context, d *generic.Generic) error {
 		return err
 	}
 	// No need for migration - marker has already been set
-	// if userVersion == 1 {
-	// 	return nil
-	// }
+	if userVersion == 1 {
+		return nil
+	}
 
 	fmt.Printf("user version pass")
 
@@ -178,8 +190,10 @@ func doMigrate(ctx context.Context, d *generic.Generic) error {
 	if err := row.Scan(&tableCount); err != nil {
 		return err
 	}
-
 	fmt.Printf("table count :%d", tableCount)
+
+	fmt.Printf("number of tables: %d", countTable(ctx, d.DB, "kine"))
+
 	// Perform migration from key_value table to kine table
 	if tableCount > 0 {
 		fmt.Printf("CheckTableRowCounts")
