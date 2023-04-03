@@ -164,8 +164,6 @@ func countTable(ctx context.Context, db *sql.DB, tableName string) (error, int) 
 		return err, 0
 	}
 
-	fmt.Printf("table count :%d", tableCount)
-
 	return nil, tableCount
 }
 
@@ -182,19 +180,20 @@ func doMigrate(ctx context.Context, d *generic.Generic) error {
 		return err
 	}
 	// No need for migration - marker has already been set
-	if userVersion == 1 {
-		return nil
-	}
+	// if userVersion == 1 {
+	// 	return nil
+	// }
 
 	fmt.Printf("user version pass")
 
 	// Check if the key_value table exists
-	tableListSQL := `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'key_value'`
-	row = d.DB.QueryRowContext(ctx, tableListSQL)
-	var tableCount int
-	if err := row.Scan(&tableCount); err != nil {
-		return err
-	}
+	_, tableCount := countTable(context.Background(), d.DB, "key_value")
+	// tableListSQL := `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'key_value'`
+	// row = d.DB.QueryRowContext(ctx, tableListSQL)
+	// var tableCount int
+	// if err := row.Scan(&tableCount); err != nil {
+	// 	return err
+	// }
 	fmt.Printf("table count :%d", tableCount)
 
 	// Perform migration from key_value table to kine table
