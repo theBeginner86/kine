@@ -6,6 +6,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"os"
 	"time"
 
@@ -53,6 +54,7 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 		if err == nil {
 			break
 		}
+		fmt.Printf("failed to setup db: %v", err)
 		logrus.Errorf("failed to setup db: %v", err)
 		select {
 		case <-ctx.Done():
