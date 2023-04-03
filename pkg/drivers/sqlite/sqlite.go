@@ -165,9 +165,11 @@ func doMigrate(ctx context.Context, d *generic.Generic) error {
 		return err
 	}
 	// No need for migration - marker has already been set
-	if userVersion == 1 {
-		return nil
-	}
+	// if userVersion == 1 {
+	// 	return nil
+	// }
+
+	fmt.Printf("migrate happening")
 
 	// Check if the key_value table exists
 	tableListSQL := `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'key_value'`
