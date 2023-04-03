@@ -50,7 +50,8 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 	// this is the first SQL that will be executed on a new DB conn so
 	// loop on failure here because in the case of dqlite it could still be initializing
 	for i := 0; i < 300; i++ {
-		err = createTable(dialect.DB)
+		// err = createTable(dialect.DB)
+		err = setup(dialect)
 		if err == nil {
 			break
 		}
@@ -66,15 +67,27 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 		return nil, nil, errors.Wrap(err, "db table creation failed")
 	}
 
-	if err := doMigrate(context.Background(), dialect); err != nil {
-		return nil, nil, errors.Wrap(err, "migration failed")
-	}
+	// if err := doMigrate(context.Background(), dialect); err != nil {
+	// 	return nil, nil, errors.Wrap(err, "migration failed")
+	// }
 
 	if err := dialect.Prepare(); err != nil {
 		return nil, nil, errors.Wrap(err, "query preparation failed")
 	}
 
 	return logstructured.New(sqllog.New(dialect)), dialect, nil
+}
+
+func setup(dialect *generic.Generic) error {
+	if err := createTable(dialect.DB); err != nil {
+		return err
+	}
+
+	if err := doMigrate(context.Background(), dialect); err != nil {
+		return errors.Wrap(err, "migration failed")
+	}
+
+	return nil
 }
 
 func createTable(db *sql.DB) error {
