@@ -6,7 +6,6 @@ package sqlite
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"os"
 	"time"
 
@@ -50,7 +49,6 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 	// this is the first SQL that will be executed on a new DB conn so
 	// loop on failure here because in the case of dqlite it could still be initializing
 	for i := 0; i < 300; i++ {
-		// err = createTable(dialect.DB)
 		err = setup(dialect)
 		if err == nil {
 			break
@@ -66,10 +64,6 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "db table creation failed")
 	}
-
-	// if err := doMigrate(context.Background(), dialect); err != nil {
-	// 	return nil, nil, errors.Wrap(err, "migration failed")
-	// }
 
 	if err := dialect.Prepare(); err != nil {
 		return nil, nil, errors.Wrap(err, "query preparation failed")
@@ -91,7 +85,6 @@ func setup(dialect *generic.Generic) error {
 }
 
 func createTable(db *sql.DB) error {
-	fmt.Printf("Table creation\n")
 	createTableSQL := `CREATE TABLE IF NOT EXISTS kine
 			(
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -155,7 +148,6 @@ func alterTableIndices(d *generic.Generic) error {
 // table only if the old key value table exists and migration has not been
 // done already.
 func doMigrate(ctx context.Context, d *generic.Generic) error {
-	fmt.Printf("doMigrate()\n")
 	userVersionSQL := `PRAGMA user_version`
 	row := d.DB.QueryRowContext(ctx, userVersionSQL)
 
@@ -179,52 +171,31 @@ func doMigrate(ctx context.Context, d *generic.Generic) error {
 	// Perform migration from key_value table to kine table
 	if tableCount > 0 {
 		if err := d.CheckTableRowCounts(ctx); err != nil {
-			return errors.Wrap(err, "table rows could not be counted during migration")
+			msg := "table rows could not be counted during migration"
+			logrus.Errorf("%s: %v", msg, err)
+			return errors.Wrap(err, msg)
 		}
-		// var err error
-		// for i := 0; i < 300; i++ {
-		// 	// Clear the kine table
-		// 	err = d.FlushRows(ctx)
-		// 	if err != nil {
-		// 		logrus.Errorf("failed to flush rows: %v", err)
-		// 		continue
-		// 	}
-		// 	err = d.MigrateRows(ctx)
-		// 	if err == nil {
-		// 		break
-		// 	}
-		// 	logrus.Errorf("failed to migrate rows: %v", err)
-		// 	select {
-		// 	case <-ctx.Done():
-		// 		return ctx.Err()
-		// 	case <-time.After(time.Second):
-		// 	}
-		// 	time.Sleep(time.Second)
-		// }
-		// err = d.FlushRows(ctx)
-		// if err != nil {
-		// 	logrus.Errorf("failed to flush rows: %v", err)
-		// 	return errors.Wrap(err, "row migrations failed")
-		// }
 
 		err := d.MigrateRows(ctx)
 		if err != nil {
-			logrus.Errorf("failed to migrate rows: %v", err)
-			return errors.Wrap(err, "row migrations failed during migration")
+			msg := "failed to migrate rows"
+			logrus.Errorf("%s: %v", msg, err)
+			return errors.Wrap(err, msg)
 		}
 	}
 
-	fmt.Printf("Calling alterTableIndices()\n")
 	if err := alterTableIndices(d); err != nil {
-		logrus.Errorf("table index changes failed during migration: %v", err)
-		return errors.Wrap(err, "table index changes failed during migration")
+		msg := "table index changes failed during migration"
+		logrus.Errorf("%s: %v", msg, err)
+		return errors.Wrap(err, msg)
 	}
 
 	setUserVersionSQL := `PRAGMA user_version = 1`
 	_, err := d.DB.ExecContext(ctx, setUserVersionSQL)
 	if err != nil {
-		logrus.Errorf("version setting failed during migration: %v", err)
-		return errors.Wrap(err, "version setting failed during migration")
+		msg := "version setting failed during migration"
+		logrus.Errorf("%s: %v", msg, err)
+		return errors.Wrap(err, msg)
 	}
 
 	return nil
