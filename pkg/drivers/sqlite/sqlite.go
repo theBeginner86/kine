@@ -165,9 +165,9 @@ func doMigrate(ctx context.Context, d *generic.Generic) error {
 		return err
 	}
 	// No need for migration - marker has already been set
-	if userVersion == 1 {
-		return nil
-	}
+	// if userVersion == 1 {
+	// 	return nil
+	// }
 
 	fmt.Printf("user version pass")
 
