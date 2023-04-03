@@ -84,6 +84,8 @@ func setup(dialect *generic.Generic) error {
 		return err
 	}
 
+	fmt.Printf("number of tables: %d", countTable(context.Background(), dialect.DB, "kine"))
+
 	if err := doMigrate(context.Background(), dialect); err != nil {
 		return errors.Wrap(err, "migration failed")
 	}
@@ -193,8 +195,6 @@ func doMigrate(ctx context.Context, d *generic.Generic) error {
 		return err
 	}
 	fmt.Printf("table count :%d", tableCount)
-
-	fmt.Printf("number of tables: %d", countTable(ctx, d.DB, "kine"))
 
 	// Perform migration from key_value table to kine table
 	if tableCount > 0 {
