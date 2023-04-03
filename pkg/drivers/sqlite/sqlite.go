@@ -167,6 +167,18 @@ func countTables(ctx context.Context, db *sql.DB) (error, int) {
 	return nil, count
 }
 
+func tableNames(ctx context.Context, db *sql.DB) (error, []string) {
+	// Check if the key_value table exists
+	tableNamesSQL := `SELECT name FROM sqlite_master WHERE type = 'table'`
+	row := db.QueryRowContext(ctx, tableNamesSQL)
+	var tableNames []string
+	if err := row.Scan(&tableNames); err != nil {
+		return err, []string{}
+	}
+
+	return nil, tableNames
+}
+
 func countTable(ctx context.Context, db *sql.DB, tableName string) (error, int) {
 	// Check if the key_value table exists
 	tableListSQL := fmt.Sprintf(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = '%s'`, tableName)
@@ -201,6 +213,9 @@ func doMigrate(ctx context.Context, d *generic.Generic) error {
 	_, allTables := countTables(context.Background(), d.DB)
 	fmt.Printf("all tables count :%d\n", allTables)
 
+	_, names := tableNames(context.Background(), d.DB)
+	fmt.Printf("all tables count :%v\n", names)
+
 	_, kineTable := countTable(context.Background(), d.DB, "kine")
 	fmt.Printf("kine table count :%d\n", kineTable)
 
@@ -212,7 +227,7 @@ func doMigrate(ctx context.Context, d *generic.Generic) error {
 	// if err := row.Scan(&tableCount); err != nil {
 	// 	return err
 	// }
-	fmt.Printf("table count :%d\n", tableCount)
+	fmt.Printf("key_value table count :%d\n", tableCount)
 
 	// Perform migration from key_value table to kine table
 	if tableCount > 0 {
