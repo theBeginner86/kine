@@ -165,11 +165,11 @@ func doMigrate(ctx context.Context, d *generic.Generic) error {
 		return err
 	}
 	// No need for migration - marker has already been set
-	// if userVersion == 1 {
-	// 	return nil
-	// }
+	if userVersion == 1 {
+		return nil
+	}
 
-	fmt.Printf("migrate happening")
+	fmt.Printf("user version pass")
 
 	// Check if the key_value table exists
 	tableListSQL := `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'key_value'`
@@ -179,6 +179,7 @@ func doMigrate(ctx context.Context, d *generic.Generic) error {
 		return err
 	}
 
+	fmt.Printf("table count :%d", tableCount)
 	// Perform migration from key_value table to kine table
 	if tableCount > 0 {
 		fmt.Printf("CheckTableRowCounts")
