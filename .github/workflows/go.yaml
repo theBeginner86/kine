@@ -33,8 +33,8 @@ jobs:
       - name: go vet
         run: make go.vet
 
-  tests:
-    name: Tests
+  tests-sqlite:
+    name: Test sqlite
     runs-on: ubuntu-latest
 
     steps:
@@ -52,8 +52,33 @@ jobs:
       - name: Run tests
         run: make go.test
 
+  tests-dqlite:
+    name: Test dqlite
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out Code
+        uses: actions/checkout@v2.4.0
+
+      - name: Install Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: "1.19"
+
+      - name: go mod download
+        run: go mod download
+
+      - name: install dqlite
+        run: |
+          sudo add-apt-repository ppa:dqlite/dev
+          sudo apt update
+          sudo apt install -y libdqlite-dev
+
+      - name: Run tests
+        run: make go.test.dqlite
+
   benchmarks:
-    name: Benchmarks
+    name: Benchmark sqlite
     runs-on: ubuntu-latest
 
     steps:
@@ -70,3 +95,28 @@ jobs:
 
       - name: Run benchmarks
         run: make go.bench
+
+  benchmarks-dqlite:
+    name: Benchmark dqlite
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out Code
+        uses: actions/checkout@v2.4.0
+
+      - name: Install Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: "1.19"
+
+      - name: go mod download
+        run: go mod download
+
+      - name: install dqlite
+        run: |
+          sudo add-apt-repository ppa:dqlite/dev
+          sudo apt update
+          sudo apt install -y libdqlite-dev
+
+      - name: Run benchmarks
+        run: make go.bench.dqlite

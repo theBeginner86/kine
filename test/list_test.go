@@ -12,7 +12,7 @@ import (
 // TestList is the unit test for List operation.
 func TestList(t *testing.T) {
 	ctx := context.Background()
-	client, _ := newKine(t)
+	client, _ := newKine(ctx, t)
 
 	t.Run("ListSuccess", func(t *testing.T) {
 		g := NewWithT(t)
@@ -99,7 +99,7 @@ func TestList(t *testing.T) {
 // BenchmarkList is a benchmark for the Get operation.
 func BenchmarkList(b *testing.B) {
 	ctx := context.Background()
-	client, _ := newKine(b)
+	client, _ := newKine(ctx, b)
 	g := NewWithT(b)
 
 	numItems := b.N

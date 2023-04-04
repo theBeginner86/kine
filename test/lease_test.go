@@ -13,7 +13,7 @@ import (
 // TestLease is unit testing for the lease operation.
 func TestLease(t *testing.T) {
 	ctx := context.Background()
-	client, _ := newKine(t)
+	client, _ := newKine(ctx, t)
 
 	t.Run("LeaseGrant", func(t *testing.T) {
 		g := NewWithT(t)
@@ -73,7 +73,7 @@ func TestLease(t *testing.T) {
 // BenchmarkLease is a benchmark for the lease operation.
 func BenchmarkLease(b *testing.B) {
 	ctx := context.Background()
-	client, _ := newKine(b)
+	client, _ := newKine(ctx, b)
 
 	g := NewWithT(b)
 	for i := 0; i < b.N; i++ {
