@@ -11,7 +11,7 @@ import (
 
 func TestCompaction(t *testing.T) {
 	ctx := context.Background()
-	client, backend := newKine(t)
+	client, backend := newKine(ctx, t)
 
 	t.Run("SmallDatabaseDeleteEntry", func(t *testing.T) {
 		g := NewWithT(t)
@@ -104,7 +104,7 @@ func deleteEntry(ctx context.Context, g Gomega, client *clientv3.Client, key str
 
 func BenchmarkCompaction(b *testing.B) {
 	ctx := context.Background()
-	client, backend := newKine(b)
+	client, backend := newKine(ctx, b)
 	g := NewWithT(b)
 
 	numAddEntries := 100_000

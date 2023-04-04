@@ -11,7 +11,7 @@ import (
 // TestWatch is unit testing for the Watch operation.
 func TestWatch(t *testing.T) {
 	ctx := context.Background()
-	client, _ := newKine(t)
+	client, _ := newKine(ctx, t)
 
 	var (
 		revAfterCreate int64
