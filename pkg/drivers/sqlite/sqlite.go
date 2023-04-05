@@ -186,11 +186,11 @@ func migration(ctx context.Context, txn *sql.Tx, d *generic.Generic) error {
 		return err
 	}
 	// No need for migration - marker has already been set
-	if userVersion == 1 {
+	if userVersion == databaseSchemaVersion {
 		return nil
 	}
 
-	if userVersion > 1 {
+	if userVersion > databaseSchemaVersion {
 		return errors.Errorf("unsupported version: %d", userVersion)
 	}
 
