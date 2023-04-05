@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/mattn/go-sqlite3"
 	"github.com/pkg/errors"
@@ -27,6 +28,8 @@ func New(ctx context.Context, dataSourceName string) (server.Backend, error) {
 }
 
 func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.Backend, *generic.Generic, error) {
+	const retryAttempts = 300
+
 	if dataSourceName == "" {
 		if err := os.MkdirAll("./db", 0700); err != nil {
 			return nil, nil, err
@@ -38,11 +41,18 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 	if err != nil {
 		return nil, nil, err
 	}
-
-	if err := setup(ctx, dialect.DB); err != nil {
-		msg := "failed to setup db"
-		logrus.Errorf("%s: %v", msg, err)
-		return nil, nil, errors.Wrap(err, msg)
+	for i := 0; i < retryAttempts; i++ {
+		err = setup(ctx, dialect.DB)
+		if err == nil {
+			break
+		}
+		logrus.Errorf("failed to setup db: %v", err)
+		select {
+		case <-ctx.Done():
+			return nil, nil, ctx.Err()
+		case <-time.After(time.Second):
+		}
+		time.Sleep(time.Second)
 	}
 
 	dialect.LastInsertID = true
@@ -66,7 +76,6 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string) (server.
 // table if the key_value table exists, all in a single database transaction.
 // changes are rolled back if an error occurs.
 func setup(ctx context.Context, db *sql.DB) error {
-	const retryAttempts = 300
 	// Optimistically ask for the user_version without starting a transaction
 	var schemaVersion int
 
@@ -85,16 +94,8 @@ func setup(ctx context.Context, db *sql.DB) error {
 	}
 	defer txn.Rollback()
 
-	for i := 0; i < retryAttempts; i++ {
-		if err := migrate(ctx, txn); err != nil {
-			if sqliteErr, ok := err.(sqlite3.Error); ok && sqliteErr.ExtendedCode == sqlite3.ErrBusySnapshot {
-				// Another write transaction got in the way (SERIALIZABLE isolation).
-				// The whole transaction can be retried.
-				continue
-			}
-			return errors.Wrap(err, "migration failed")
-		}
-		break
+	if err := migrate(ctx, txn); err != nil {
+		return errors.Wrap(err, "migration failed")
 	}
 
 	return txn.Commit()
