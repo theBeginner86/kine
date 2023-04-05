@@ -157,45 +157,6 @@ func q(sql, param string, numbered bool) string {
 	})
 }
 
-// CheckTableRowCounts returns an error if the old key-value table is empty, or
-// the new Kine table is not empty
-func (d *Generic) CheckTableRowCounts(txn *sql.Tx, ctx context.Context) error {
-	var (
-		count     = 0
-		countKV   = txn.QueryRowContext(ctx, "SELECT COUNT(*) FROM key_value")
-		countKine = txn.QueryRowContext(ctx, "SELECT COUNT(*) FROM kine")
-	)
-
-	if err := countKV.Scan(&count); err != nil || count == 0 {
-		return err
-	}
-
-	if err := countKine.Scan(&count); err != nil || count != 0 {
-		return err
-	}
-
-	return nil
-}
-
-// MigrateRows copies the rows with the latest revision ID of each set of rows with identical names,
-// from the old key_value table to the new Kine table. Only unexpired rows are copied, and their
-// TTL is reset to max.
-func (d *Generic) MigrateRows(txn *sql.Tx, ctx context.Context) error {
-	logrus.Infof("Migrating content from old table")
-	insertSQL := `INSERT INTO kine(deleted, create_revision, prev_revision, name, value, created, lease)
-					SELECT 0, 0, 0, kv.name, kv.value, 1, CASE WHEN kv.ttl > 0 THEN 15 ELSE 0 END
-					FROM key_value kv
-						WHERE kv.id IN (SELECT MAX(kvd.id) FROM key_value kvd GROUP BY kvd.name)`
-
-	_, err := txn.ExecContext(ctx, insertSQL)
-	if err != nil {
-		logrus.Errorf("Row migrations failed: %v", err)
-		return err
-	}
-
-	return nil
-}
-
 // Migrate first checks that the old key_value table and new Kine table are
 // correctly sized, and if so, it performs row migration. It's a legacy method,
 // supporting MySQL and PGSql
