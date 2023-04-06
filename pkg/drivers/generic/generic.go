@@ -157,6 +157,9 @@ func q(sql, param string, numbered bool) string {
 	})
 }
 
+// Migrate first checks that the old key_value table and new Kine table are
+// correctly sized, and if so, it performs row migration. It's a legacy method,
+// supporting MySQL and PGSql
 func (d *Generic) Migrate(ctx context.Context) {
 	var (
 		count     = 0
@@ -179,7 +182,7 @@ func (d *Generic) Migrate(ctx context.Context) {
 					FROM key_value kv
 						WHERE kv.id IN (SELECT MAX(kvd.id) FROM key_value kvd GROUP BY kvd.name)`)
 	if err != nil {
-		logrus.Errorf("Migration failed: %v", err)
+		logrus.Errorf("Row migrations failed: %v", err)
 	}
 }
 
