@@ -1,25 +1,3 @@
-## Minimal example of using kine
-The following example uses kine with a mysql database for persistence.
-
-A sample script is available to generate certs [here](generate-certs.sh)
-
-We can run mysql on a host:
-
-```
-docker run --name kine-mysql -v $PWD:/etc/mysql/conf.d -p 3306:3306 -e MYSQL_DATABASE=kine -e MYSQL_ROOT_PASSWORD=$PASSWORD -d mysql:latest
-```
-
-This will start mysql db with ssl enabled for client connections.
-
-A sample script is available to generate certs [here](generate-certs.sh)
-
-Run kine on the same host as mysql database:
-```
-kine --endpoint "mysql://root:$PASSWORD@tcp(localhost:3306)/kine"  --ca-file ca.crt --cert-file server.crt --key-file server.key
-```
-
-This will expose the mysql db as an etcd endpoint.
-
 ### Using with RKE
 Use the following RKE cluster.yml sample to boot up the cluster. 
 
