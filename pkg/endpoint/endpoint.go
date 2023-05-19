@@ -9,8 +9,6 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/rancher/kine/pkg/drivers/dqlite"
-	"github.com/rancher/kine/pkg/drivers/mysql"
-	"github.com/rancher/kine/pkg/drivers/pgsql"
 	"github.com/rancher/kine/pkg/drivers/sqlite"
 	"github.com/rancher/kine/pkg/server"
 	"github.com/rancher/kine/pkg/tls"
@@ -21,12 +19,10 @@ import (
 )
 
 const (
-	KineSocket      = "unix://kine.sock"
-	SQLiteBackend   = "sqlite"
-	DQLiteBackend   = "dqlite"
-	ETCDBackend     = "etcd3"
-	MySQLBackend    = "mysql"
-	PostgresBackend = "postgres"
+	KineSocket    = "unix://kine.sock"
+	SQLiteBackend = "sqlite"
+	DQLiteBackend = "dqlite"
+	ETCDBackend   = "etcd3"
 )
 
 type Config struct {
@@ -189,10 +185,6 @@ func getKineStorageBackend(ctx context.Context, driver, dsn string, cfg Config) 
 		backend, err = sqlite.New(ctx, dsn)
 	case DQLiteBackend:
 		backend, err = dqlite.New(ctx, dsn, cfg.Config)
-	case PostgresBackend:
-		backend, err = pgsql.New(ctx, dsn, cfg.Config)
-	case MySQLBackend:
-		backend, err = mysql.New(ctx, dsn, cfg.Config)
 	default:
 		return false, nil, fmt.Errorf("storage backend is not defined")
 	}
